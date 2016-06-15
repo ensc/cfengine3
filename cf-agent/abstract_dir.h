@@ -30,8 +30,10 @@
  */
 
 typedef struct AbstractDir_ AbstractDir;
+enum RemoteBadDetail;
 
-AbstractDir *AbstractDirOpen(const char *dirname, FileCopy fc, AgentConnection *pp);
+AbstractDir *AbstractDirOpen(const char *dirname, FileCopy fc, AgentConnection *pp,
+			     enum RemoteBadDetail *detail);
 const struct dirent *AbstractDirRead(AbstractDir *dir);
 void AbstractDirClose(AbstractDir *dir);
 
