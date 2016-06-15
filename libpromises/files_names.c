@@ -62,6 +62,7 @@ int IsNewerFileTree(const char *dir, time_t reftime)
         }
     }
 
+    /* TODO: check detailed result? */
     if ((dirh = DirOpen(dir)) == NULL)
     {
         Log(LOG_LEVEL_ERR, "Unable to open directory '%s' in IsNewerFileTree. (opendir: %s)", dir, GetErrorStr());
