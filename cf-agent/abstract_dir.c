@@ -54,7 +54,7 @@ AbstractDir *AbstractDirOpen(const char *dirname, FileCopy fc, AgentConnection *
     else
     {
         assert(fc.servers && strcmp(RlistScalarValue(fc.servers), "localhost"));
-        d->list = RemoteDirList(dirname, fc.encrypt, conn);
+        d->list = RemoteDirList(dirname, fc.encrypt, conn, NULL);
         if (d->list == NULL)
         {
             free(d);
