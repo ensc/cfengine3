@@ -38,22 +38,49 @@
 #include <rlist.h>
 #include <stat_cache.h>                                      /* remote_stat */
 
-int cf_lstat(const char *file, struct stat *buf, FileCopy fc, AgentConnection *conn)
+int cf_lstat(const char *file, struct stat *buf, FileCopy fc, AgentConnection *conn,
+	     enum RemoteBadDetail *detail)
 {
+    enum RemoteBadDetail tmp_detail;
+    int ret;
     if (conn == NULL)
     {
-        int ret = lstat(file, buf);
-        if (ret == -1)
-        {
+        ret = lstat(file, buf);
+        if (ret != -1)
+	{
+		tmp_detail = REMOTE_BAD_DETAIL_UNSPECIFIED;
+	} else {
+		switch (errno) {
+		case EACCES:
+			tmp_detail = REMOTE_BAD_DETAIL_EPERM;
+			break;
+
+		case ENOENT:
+			tmp_detail = REMOTE_BAD_DETAIL_ENOENT;
+			break;
+
+		case ENOTDIR:
+			tmp_detail = REMOTE_BAD_DETAIL_ENOTDIR;
+			break;
+
+		default:
+			tmp_detail = REMOTE_BAD_DETAIL_UNSPECIFIED;
+			break;
+		}
+
             Log(LOG_LEVEL_ERR, "lstat: %s", GetErrorStr());
         }
-        return ret;
+
+	if (detail)
+		*detail = tmp_detail;
     }
     else
     {
         assert(fc.servers && strcmp(fc.servers->val.item, "localhost"));
-        return cf_remote_stat(conn, fc.encrypt, file, buf, "link", NULL);
+        ret = cf_remote_stat(conn, fc.encrypt, file, buf, "link", detail);
     }
+
+    return ret;
 }
 
 ssize_t CfReadLine(char **buff, size_t *size, FILE *fp)

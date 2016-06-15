@@ -119,7 +119,10 @@ bool ConsiderAbstractFile(const char *filename, const char *directory, FileCopy 
     /* Second, send the STAT command. */
 
     struct stat stat;
-    if (cf_lstat(buf, &stat, fc, conn) == -1)
+    /* TOOD: this might access remote files so we should check the remote
+     * detail.  But function is called from a context only, where it can be
+     * assumed that file exists, so skip this check for now */
+    if (cf_lstat(buf, &stat, fc, conn, NULL) == -1)
     {
         return false;                                      /* stat() failed */
     }
