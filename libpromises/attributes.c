@@ -824,6 +824,30 @@ ENTERPRISE_FUNC_0ARG_DEFINE_STUB(HashMethod, GetBestFileChangeHashMethod)
     return HASH_METHOD_BEST;
 }
 
+static enum FileMissingOk
+GetCopyMissingOk(const EvalContext *ctx, const Promise *pp)
+{
+    char const *value;
+
+    (void)ctx;
+    value = PromiseGetConstraintAsRval(pp, "missing_ok", RVAL_TYPE_SCALAR);
+
+    if (!value || strcmp(value, "no") == 0 || strcmp(value, "false") == 0) {
+	    /* default */
+	    return FILE_MISSING_OK_NO;
+    } else if (strcmp(value, "leaf") == 0) {
+	    /* only the file part; path must exist */
+	    return FILE_MISSING_OK_LEAF;
+    } else if (strcmp(value, "yes") == 0 || strcmp(value, "all") ||
+	       strcmp(value, "true")) {
+	    return FILE_MISSING_OK_ALL;
+    } else {
+	    Log(LOG_LEVEL_ERR, "invalid 'missing_ok=%s' constraint", value);
+	    PromiseRef(LOG_LEVEL_ERR, pp);
+	    return FILE_MISSING_OK_NO;
+    }
+}
+
 FileChange GetChangeMgtConstraints(const EvalContext *ctx, const Promise *pp)
 {
     FileChange c;
@@ -980,7 +1004,7 @@ FileCopy GetCopyConstraints(const EvalContext *ctx, const Promise *pp)
     f.encrypt = PromiseGetConstraintAsBoolean(ctx, "encrypt", pp);
     f.verify = PromiseGetConstraintAsBoolean(ctx, "verify", pp);
     f.purge = PromiseGetConstraintAsBoolean(ctx, "purge", pp);
-    f.missing_ok = PromiseGetConstraintAsBoolean(ctx, "missing_ok", pp);
+    f.missing_ok = GetCopyMissingOk(ctx, pp);
     f.destination = NULL;
 
     return f;

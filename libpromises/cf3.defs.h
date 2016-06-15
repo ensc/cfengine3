@@ -1531,7 +1531,7 @@ typedef struct
     int purge;
     short timeout;
     ProtocolVersion protocol_version;
-    bool missing_ok;
+    enum FileMissingOk missing_ok;
 } FileCopy;
 
 typedef struct
