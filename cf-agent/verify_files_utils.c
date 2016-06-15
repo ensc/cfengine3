@@ -734,6 +734,7 @@ static PromiseResult SourceSearchAndCopy(EvalContext *ctx, const char *from, cha
     Item *namecache = NULL;
     const struct dirent *dirp;
     AbstractDir *dirh;
+    enum RemoteBadDetail detail;
 
     if (maxrecurse == 0)        /* reached depth limit */
     {
@@ -808,7 +809,7 @@ static PromiseResult SourceSearchAndCopy(EvalContext *ctx, const char *from, cha
     }
 
     /* Send OPENDIR command. */
-    if ((dirh = AbstractDirOpen(from, attr.copy, conn)) == NULL)
+    if ((dirh = AbstractDirOpen(from, attr.copy, conn, &detail)) == NULL)
     {
         cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_INTERRUPTED, pp, attr, "copy can't open directory '%s'", from);
         return PROMISE_RESULT_INTERRUPTED;
@@ -1043,7 +1044,7 @@ static PromiseResult VerifyCopy(EvalContext *ctx,
         strcpy(destdir, destination);
         AddSlash(destdir);
 
-        if ((dirh = AbstractDirOpen(sourcedir, attr.copy, conn)) == NULL)
+        if ((dirh = AbstractDirOpen(sourcedir, attr.copy, conn, NULL)) == NULL)
         {
             cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, attr,
                  "Can't open directory '%s'. (opendir: %s)",
