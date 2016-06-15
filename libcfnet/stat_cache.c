@@ -26,6 +26,7 @@
 #include <platform.h>
 #include <stat_cache.h>
 
+#include <cf3.defs.h>
 #include <cfnet.h>                            /* AgentConnection */
 #include <net.h>                              /* {Send,Receive}Transaction */
 #include <client_protocol.h>                  /* BadProtoReply,OKProtoReply */
@@ -94,8 +95,11 @@ static int StatFromCache(AgentConnection *conn, const char *file,
  *
  */
 int cf_remote_stat(AgentConnection *conn, bool encrypt, const char *file,
-                   struct stat *statbuf, const char *stattype)
+                   struct stat *statbuf, const char *stattype,
+		   enum RemoteBadDetail *detail)
 {
+    unsigned int num_detail;
+
     assert(strcmp(stattype, "file") == 0 ||
            strcmp(stattype, "link") == 0);
 
@@ -166,11 +170,14 @@ int cf_remote_stat(AgentConnection *conn, bool encrypt, const char *file,
         return -1;
     }
 
-    if (ReceiveTransaction(conn->conn_info, recvbuffer, NULL) == -1)
+    if (ReceiveTransactionCode(conn->conn_info, recvbuffer, NULL, &num_detail) == -1)
     {
         /* TODO mark connection in the cache as closed. */
         return -1;
     }
+
+    if (detail)
+	    *detail = (enum RemoteBadDetail)num_detail;
 
     if (strstr(recvbuffer, "unsynchronized"))
     {
@@ -182,8 +189,9 @@ int cf_remote_stat(AgentConnection *conn, bool encrypt, const char *file,
 
     if (BadProtoReply(recvbuffer))
     {
-        Log(LOG_LEVEL_VERBOSE, "Server returned error: %s",
-            recvbuffer + strlen("BAD: "));
+        Log(detail ? LOG_LEVEL_DEBUG : LOG_LEVEL_VERBOSE,
+	    "Server returned error: %s (-> #%u)",
+	    recvbuffer + strlen("BAD: "), num_detail);
         errno = EPERM;
         return -1;
     }

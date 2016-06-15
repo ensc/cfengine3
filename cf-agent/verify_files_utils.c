@@ -3503,7 +3503,7 @@ static int cf_stat(const char *file, struct stat *buf, FileCopy fc, AgentConnect
         assert(fc.servers != NULL &&
                strcmp(RlistScalarValue(fc.servers), "localhost") != 0);
 
-        return cf_remote_stat(conn, fc.encrypt, file, buf, "file");
+        return cf_remote_stat(conn, fc.encrypt, file, buf, "file", NULL);
     }
 }
 

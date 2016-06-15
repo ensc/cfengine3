@@ -62,9 +62,11 @@ struct Stat_
     Stat *next;
 };
 
+enum RemoteBadDetail;
 
 int cf_remote_stat(AgentConnection *conn, bool encrypt, const char *file,
-                   struct stat *statbuf, const char *stattype);
+                   struct stat *statbuf, const char *stattype,
+		   enum RemoteBadDetail *detail);
 const Stat *StatCacheLookup(const AgentConnection *conn, const char *file_name,
                             const char *server_name);
 
