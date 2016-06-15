@@ -26,6 +26,7 @@
 #include <platform.h>
 #include <stat_cache.h>
 
+#include <cf3.defs.h>
 #include <cfnet.h>                            /* AgentConnection */
 #include <net.h>                              /* {Send,Receive}Transaction */
 #include <client_protocol.h>                  /* BadProtoReply,OKProtoReply */
@@ -58,7 +59,8 @@ void DestroyStatCache(Stat *data)
  * @return 0 if found, 1 if not found, -1 in case of error.
  */
 static int StatFromCache(AgentConnection *conn, const char *file,
-                         struct stat *statbuf, const char *stattype)
+                         struct stat *statbuf, const char *stattype,
+                         enum RemoteBadDetail *detail)
 {
     for (Stat *sp = conn->cache; sp != NULL; sp = sp->next)
     {
@@ -70,6 +72,10 @@ static int StatFromCache(AgentConnection *conn, const char *file,
             if (sp->cf_failed)  /* cached failure from cfopendir */
             {
                 errno = EPERM;
+
+                if (detail)
+                    *detail = sp->bad_detail;
+
                 return -1;
             }
 
@@ -106,8 +112,11 @@ static int StatFromCache(AgentConnection *conn, const char *file,
  *
  */
 int cf_remote_stat(AgentConnection *conn, bool encrypt, const char *file,
-                   struct stat *statbuf, const char *stattype)
+                   struct stat *statbuf, const char *stattype,
+		   enum RemoteBadDetail *detail)
 {
+    unsigned int num_detail;
+
     assert(strcmp(stattype, "file") == 0 ||
            strcmp(stattype, "link") == 0);
 
@@ -121,7 +130,7 @@ int cf_remote_stat(AgentConnection *conn, bool encrypt, const char *file,
         return -1;
     }
 
-    int ret = StatFromCache(conn, file, statbuf, stattype);
+    int ret = StatFromCache(conn, file, statbuf, stattype, detail);
     if (ret == 0 || ret == -1)                            /* found or error */
     {
         return ret;
@@ -150,6 +159,10 @@ int cf_remote_stat(AgentConnection *conn, bool encrypt, const char *file,
         {
             Log(LOG_LEVEL_ERR,
                 "Cannot do encrypted copy without keys (use cf-key)");
+
+            if (detail)
+                *detail = REMOTE_BAD_DETAIL_NOKEY;
+
             return -1;
         }
 
@@ -183,11 +196,18 @@ int cf_remote_stat(AgentConnection *conn, bool encrypt, const char *file,
         Log(LOG_LEVEL_INFO,
             "Transmission failed/refused talking to %.255s:%.255s. (stat: %s)",
             conn->this_server, file, GetErrorStr());
+
+        if (detail)
+            *detail = REMOTE_BAD_DETAIL_EIO;
+
         return -1;
     }
 
-    if (ReceiveTransaction(conn->conn_info, recvbuffer, NULL) == -1)
+    if (ReceiveTransactionCode(conn->conn_info, recvbuffer, NULL, &num_detail) == -1)
     {
+        if (detail)
+	    *detail = REMOTE_BAD_DETAIL_EPIPE;
+
         /* TODO mark connection in the cache as closed. */
         return -1;
     }
@@ -197,13 +217,21 @@ int cf_remote_stat(AgentConnection *conn, bool encrypt, const char *file,
         Log(LOG_LEVEL_ERR,
             "Clocks differ too much to do copy by date (security), server reported: %s",
             recvbuffer + strlen("BAD: "));
+
+        if (detail)
+            *detail = REMOTE_BAD_DETAIL_CLOCK_SKEW;
+
         return -1;
     }
 
+    if (detail)
+	    *detail = (enum RemoteBadDetail)num_detail;
+
     if (BadProtoReply(recvbuffer))
     {
-        Log(LOG_LEVEL_VERBOSE, "Server returned error: %s",
-            recvbuffer + strlen("BAD: "));
+        Log(detail ? LOG_LEVEL_DEBUG : LOG_LEVEL_VERBOSE,
+	    "Server returned error: %s (-> #%u)",
+	    recvbuffer + strlen("BAD: "), num_detail);
         errno = EPERM;
         return -1;
     }
@@ -233,6 +261,10 @@ int cf_remote_stat(AgentConnection *conn, bool encrypt, const char *file,
         if (ret < 13)
         {
             Log(LOG_LEVEL_ERR, "Cannot read SYNCH reply from '%s', only %d/13 items parsed", conn->remoteip, ret );
+
+            if (detail)
+                *detail = REMOTE_BAD_DETAIL_BADMSG;;
+
             return -1;
         }
 
@@ -254,11 +286,17 @@ int cf_remote_stat(AgentConnection *conn, bool encrypt, const char *file,
 
         memset(recvbuffer, 0, CF_BUFSIZE);
 
-        if (ReceiveTransaction(conn->conn_info, recvbuffer, NULL) == -1)
+        if (ReceiveTransactionCode(conn->conn_info, recvbuffer, NULL, &num_detail) == -1)
         {
+            if (detail)
+                *detail = REMOTE_BAD_DETAIL_EPIPE;
+
             /* TODO mark connection in the cache as closed. */
             return -1;
         }
+
+        if (detail)
+	    *detail = (enum RemoteBadDetail)num_detail;
 
         if (strlen(recvbuffer) > 3)
         {
