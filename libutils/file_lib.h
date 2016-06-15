@@ -55,6 +55,10 @@ int FullRead(int desc, char *ptr, size_t len);
 
 int IsDirReal(const char *path);
 
+enum FileMissingOk;
+enum RemoteBadDetail;
+bool IsRemoteBadOk(enum FileMissingOk missing_ok, enum RemoteBadDetail detail);
+
 /**
  * Returns what type of line endings the file is using.
  *

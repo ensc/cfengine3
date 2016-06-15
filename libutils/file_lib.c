@@ -22,6 +22,8 @@
   included file COSL.txt.
 */
 
+#include <cf3.defs.h>
+
 #include <file_lib.h>
 #include <misc_lib.h>
 #include <dir.h>
@@ -1041,4 +1043,21 @@ static bool DeleteDirectoryTreeInternal(const char *basepath, const char *path)
 bool DeleteDirectoryTree(const char *path)
 {
     return DeleteDirectoryTreeInternal(path, path);
+}
+
+bool IsRemoteBadOk(enum FileMissingOk missing_ok, enum RemoteBadDetail detail)
+{
+	Log(LOG_LEVEL_DEBUG, "%s: missing_ok=%u, detail=%u", __func__,
+	    missing_ok, detail);
+
+	switch (detail) {
+	case REMOTE_BAD_DETAIL_ENOTDIR:
+		return missing_ok == FILE_MISSING_OK_ALL;
+
+	case REMOTE_BAD_DETAIL_ENOENT:
+		return missing_ok != FILE_MISSING_OK_NO;
+
+	default:
+		return false;
+	}
 }
