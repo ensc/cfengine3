@@ -1473,6 +1473,13 @@ enum RemoteBadDetail
     REMOTE_BAD_DETAIL_EINVAL = 22,
 };
 
+enum FileMissingOk
+{
+    FILE_MISSING_OK_NO,
+    FILE_MISSING_OK_LEAF,
+    FILE_MISSING_OK_ALL,
+};
+
 typedef struct
 {
     const char *source;
