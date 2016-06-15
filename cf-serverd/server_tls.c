@@ -579,6 +579,7 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
 
     /* We already encrypt because of the TLS layer, no need to encrypt more. */
     const int encrypted = 0;
+    enum RemoteBadDetail detail;
 
     /* Legacy stuff only for old protocol. */
     assert(conn->rsa_auth == 1);
@@ -671,10 +672,10 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
             goto protocol_error;
         }
 
-        zret = PreprocessRequestPath(filename, sizeof(filename), NULL);
+        zret = PreprocessRequestPath(filename, sizeof(filename), &detail);
         if (zret == (size_t) -1)
         {
-            RefuseAccess(conn, recvbuffer);
+            RefuseAccessDetail(conn, recvbuffer, detail);
             return true;
         }
 
@@ -733,10 +734,10 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
             goto protocol_error;
         }
 
-        zret = PreprocessRequestPath(filename, sizeof(filename) - 1, NULL);
+        zret = PreprocessRequestPath(filename, sizeof(filename) - 1, &detail);
         if (zret == (size_t) -1)
         {
-            RefuseAccess(conn, recvbuffer);
+            RefuseAccessDetail(conn, recvbuffer, detail);
             return true;
         }
 
@@ -797,10 +798,10 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
             goto protocol_error;
         }
 
-        zret = PreprocessRequestPath(filename, sizeof(filename) - 1, NULL);
+        zret = PreprocessRequestPath(filename, sizeof(filename) - 1, &detail);
         if (zret == (size_t) -1)
         {
-            RefuseAccess(conn, recvbuffer);
+            RefuseAccessDetail(conn, recvbuffer, detail);
             return true;
         }
 
@@ -866,10 +867,10 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
             goto protocol_error;
         }
 
-        zret = PreprocessRequestPath(filename, sizeof(filename), NULL);
+        zret = PreprocessRequestPath(filename, sizeof(filename), &detail);
         if (zret == (size_t) -1)
         {
-            RefuseAccess(conn, recvbuffer);
+            RefuseAccessDetail(conn, recvbuffer, detail);
             return true;
         }
 
