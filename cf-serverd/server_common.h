@@ -64,7 +64,7 @@ size_t ShortcutsExpand(char *path, size_t path_size,
                        const StringMap *shortcuts,
                        const char *ipaddr, const char *hostname,
                        const char *key);
-size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size);
+size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size, enum RemoteBadDetail *detail);
 void SetConnIdentity(ServerConnectionState *conn, const char *username);
 bool DoExec2(const EvalContext *ctx,
              ServerConnectionState *conn,
