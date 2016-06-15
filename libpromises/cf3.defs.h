@@ -1464,6 +1464,11 @@ typedef struct
 
 #include <json.h>
 
+enum RemoteBadDetail
+{
+    REMOTE_BAD_DETAIL_UNSPECIFIED = 0,
+};
+
 typedef struct
 {
     const char *source;

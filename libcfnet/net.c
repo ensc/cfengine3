@@ -50,13 +50,15 @@ extern char BINDINTERFACE[];                  /* cf3globals.c, cf3.extern.h */
  *       CF_BUFSIZE-1 (since '\0' is not sent, but the receiver needs space to
  *       append it). So transaction length will be at most 4095!
  */
-int SendTransaction(ConnectionInfo *conn_info,
-                    const char *buffer, int len, char status)
+int SendTransactionCode(ConnectionInfo *conn_info,
+			const char *buffer, int len, char status,
+			enum RemoteBadDetail code)
 {
     assert(status == CF_MORE || status == CF_DONE);
 
     char work[CF_BUFSIZE] = { 0 };
     int ret;
+    size_t l;
 
     if (len == 0)
     {
@@ -73,11 +75,26 @@ int SendTransaction(ConnectionInfo *conn_info,
         return -1;
     }
 
-    snprintf(work, CF_INBAND_OFFSET, "%c %d", status, len);
+    if ((unsigned int)(code) > 255) {
+	    Log(LOG_LEVEL_ERR,
+		"SendTransaction: internal error: (RemoteBadDetail)%u too large",
+		code);
+	    return -1;
+    }
+
+    l = snprintf(work, CF_INBAND_OFFSET, "%c %d", status, len);
+    if (l + 1 >= CF_INBAND_OFFSET) {
+	    Log(LOG_LEVEL_ERR,
+		"SendTransaction: internal error: insufficient inband space (%zu)",
+		l);
+	    return -1;
+    }
+    work[CF_INBAND_OFFSET - 1] = (unsigned char)code;
 
     memcpy(work + CF_INBAND_OFFSET, buffer, len);
 
     Log(LOG_LEVEL_DEBUG, "SendTransaction header: %s", work);
+    Log(LOG_LEVEL_DEBUG, "SendTransaction code: %u", code);
     LogRaw(LOG_LEVEL_DEBUG, "SendTransaction data: ",
            work + CF_INBAND_OFFSET, len);
 
@@ -138,7 +155,8 @@ int SendTransaction(ConnectionInfo *conn_info,
  *  @TODO shutdown() the connection in all cases were this function returns -1,
  *        in order to protect against future garbage reads.
  */
-int ReceiveTransaction(ConnectionInfo *conn_info, char *buffer, int *more)
+int ReceiveTransactionCode(ConnectionInfo *conn_info, char *buffer, int *more,
+			   enum RemoteBadDetail *code)
 {
     char proto[CF_INBAND_OFFSET + 1] = { 0 };
     int ret;
@@ -235,6 +253,12 @@ int ReceiveTransaction(ConnectionInfo *conn_info, char *buffer, int *more)
                              "bogus headers have already been checked!");
         }
     }
+
+    Log(LOG_LEVEL_DEBUG, "ReceiveTransaction code: %u",
+	proto[CF_INBAND_OFFSET - 1]);
+
+    if (code)
+	    *code = proto[CF_INBAND_OFFSET - 1];
 
     /* Get data. */
     switch(conn_info->protocol)
