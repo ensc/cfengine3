@@ -1463,6 +1463,14 @@ typedef struct
 enum RemoteBadDetail
 {
     REMOTE_BAD_DETAIL_UNSPECIFIED = 0,
+    /* a component in pathname not a directory */
+    REMOTE_BAD_DETAIL_ENOTDIR = 20,
+    /* remote file does not exist */
+    REMOTE_BAD_DETAIL_ENOENT = 2,
+    /* access denied */
+    REMOTE_BAD_DETAIL_EPERM = 1,
+    /* invalid argument */
+    REMOTE_BAD_DETAIL_EINVAL = 22,
 };
 
 typedef struct
