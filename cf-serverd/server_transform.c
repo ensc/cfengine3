@@ -1151,6 +1151,7 @@ static void KeepFileAccessPromise(const EvalContext *ctx, const Promise *pp)
 {
     char path[PATH_MAX];
     size_t path_len = strlen(pp->promiser);
+    enum RemoteBadDetail detail;
     if (path_len > sizeof(path) - 1)
     {
         goto err_too_long;
@@ -1158,11 +1159,11 @@ static void KeepFileAccessPromise(const EvalContext *ctx, const Promise *pp)
     memcpy(path, pp->promiser, path_len + 1);
 
     /* Resolve symlinks and canonicalise access_rules path. */
-    size_t ret2 = PreprocessRequestPath(path, sizeof(path), NULL);
+    size_t ret2 = PreprocessRequestPath(path, sizeof(path), &detail);
 
     if (ret2 == (size_t) -1)
     {
-        if (errno != ENOENT)                        /* something went wrong */
+        if (detail != REMOTE_BAD_DETAIL_ENOENT)	/* something went wrong */
         {
             Log(LOG_LEVEL_ERR,
                 "Failed to canonicalize path '%s' in access_rules, ignoring!",
