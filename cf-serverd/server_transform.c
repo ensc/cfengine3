@@ -1191,7 +1191,7 @@ static void KeepFileAccessPromise(const EvalContext *ctx, const Promise *pp)
     memcpy(path, pp->promiser, path_len + 1);
 
     /* Resolve symlinks and canonicalise access_rules path. */
-    size_t ret2 = PreprocessRequestPath(path, sizeof(path));
+    size_t ret2 = PreprocessRequestPath(path, sizeof(path), NULL);
 
     if (ret2 == (size_t) -1)
     {

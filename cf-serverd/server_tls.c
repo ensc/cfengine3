@@ -671,7 +671,7 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
             goto protocol_error;
         }
 
-        zret = PreprocessRequestPath(filename, sizeof(filename));
+        zret = PreprocessRequestPath(filename, sizeof(filename), NULL);
         if (zret == (size_t) -1)
         {
             RefuseAccess(conn, recvbuffer);
@@ -733,7 +733,7 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
             goto protocol_error;
         }
 
-        zret = PreprocessRequestPath(filename, sizeof(filename) - 1);
+        zret = PreprocessRequestPath(filename, sizeof(filename) - 1, NULL);
         if (zret == (size_t) -1)
         {
             RefuseAccess(conn, recvbuffer);
@@ -797,7 +797,7 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
             goto protocol_error;
         }
 
-        zret = PreprocessRequestPath(filename, sizeof(filename) - 1);
+        zret = PreprocessRequestPath(filename, sizeof(filename) - 1, NULL);
         if (zret == (size_t) -1)
         {
             RefuseAccess(conn, recvbuffer);
@@ -866,7 +866,7 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
             goto protocol_error;
         }
 
-        zret = PreprocessRequestPath(filename, sizeof(filename));
+        zret = PreprocessRequestPath(filename, sizeof(filename), NULL);
         if (zret == (size_t) -1)
         {
             RefuseAccess(conn, recvbuffer);

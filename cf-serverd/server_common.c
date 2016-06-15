@@ -1338,6 +1338,12 @@ size_t ShortcutsExpand(char *path, size_t path_size,
     return (size_t) -1;
 }
 
+#define return_bad(_detail, _code) do {		\
+		if ((_detail))			\
+			*(_detail) = (_code);	\
+		return (size_t) -1;		\
+	} while (0)
+
 /**
  * Canonicalize a path, ensure it is absolute, and resolve all symlinks.
  * In detail:
@@ -1358,7 +1364,8 @@ size_t ShortcutsExpand(char *path, size_t path_size,
  * @return the length of #reqpath after preprocessing. In case of error
  *         return (size_t) -1.
  */
-size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size)
+size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size,
+			     enum RemoteBadDetail *detail)
 {
     errno = 0;             /* on return, errno might be set from realpath() */
     char dst[reqpath_size];
@@ -1367,7 +1374,7 @@ size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size)
     if (reqpath_len == 0)
     {
         UnexpectedError("PreprocessRequestPath: 0 length string!");
-        return (size_t) -1;
+	return_bad(detail, REMOTE_BAD_DETAIL_EINVAL);
     }
 
     /* Translate all slashes to backslashes on Windows so that all the rest
@@ -1387,7 +1394,7 @@ size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size)
     if (!PathIsAbsolute(reqpath))
     {
         Log(LOG_LEVEL_INFO, "Relative paths are not allowed: %s", reqpath);
-        return (size_t) -1;
+	return_bad(detail, REMOTE_BAD_DETAIL_EINVAL);
     }
 
     /* TODO replace realpath with Solaris' resolvepath(), in all
@@ -1422,10 +1429,24 @@ size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size)
         }
         else
         {
+	    int err = errno;
             Log(LOG_LEVEL_INFO,
                 "Failed to canonicalise filename '%s' (realpath: %s)",
                 reqpath, GetErrorStr());
-            return (size_t) -1;
+
+	    switch (err) {
+	    case ENOTDIR:
+		    return_bad(detail, REMOTE_BAD_DETAIL_ENOTDIR);
+
+	    case ENOENT:
+		    return_bad(detail, REMOTE_BAD_DETAIL_ENOENT);
+
+	    case EACCES:
+		    return_bad(detail, REMOTE_BAD_DETAIL_EPERM);
+
+	    default:
+		    return_bad(detail, REMOTE_BAD_DETAIL_UNSPECIFIED);
+	    }
         }
     }
 
@@ -1439,7 +1460,7 @@ size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size)
         if (dst_len + 2 > sizeof(dst))
         {
             Log(LOG_LEVEL_INFO, "Error, path too long: %s", reqpath);
-            return (size_t) -1;
+	    return_bad(detail, REMOTE_BAD_DETAIL_EINVAL);
         }
 
         PathAppendTrailingSlash(dst, dst_len);
@@ -1632,7 +1653,7 @@ bool DoExec2(const EvalContext *ctx,
     {
         char arg0[PATH_MAX];
         if (CommandArg0_bound(arg0, CFRUNCOMMAND, sizeof(arg0)) == (size_t) -1 ||
-            PreprocessRequestPath(arg0, sizeof(arg0))           == (size_t) -1)
+            PreprocessRequestPath(arg0, sizeof(arg0), NULL)     == (size_t) -1)
         {
             Log(LOG_LEVEL_INFO, "EXEC failed, invalid cfruncommand arg0");
             RefuseAccess(conn, "EXEC");
