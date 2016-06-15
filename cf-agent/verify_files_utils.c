@@ -811,6 +811,12 @@ static PromiseResult SourceSearchAndCopy(EvalContext *ctx, const char *from, cha
     /* Send OPENDIR command. */
     if ((dirh = AbstractDirOpen(from, attr.copy, conn, &detail)) == NULL)
     {
+	if (IsRemoteBadOk(attr.copy.missing_ok, detail))
+	{
+		Log(LOG_LEVEL_DEBUG, "failed to open %s (%u)\n", from, detail);
+		return PROMISE_RESULT_NOOP;
+	}
+
         cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_INTERRUPTED, pp, attr, "copy can't open directory '%s'", from);
         return PROMISE_RESULT_INTERRUPTED;
     }
@@ -866,6 +872,16 @@ static PromiseResult SourceSearchAndCopy(EvalContext *ctx, const char *from, cha
 
 	    if (cf_stat(newfrom, &sb, attr.copy, conn, &detail) == -1)
             {
+		/* TODO: as we are recursing subdirectories, there can not be
+		 * distinguished between FILE_MISSING_OK_LEAF and
+		 * FILE_MISSING_OK_ALL */
+	        if (IsRemoteBadOk(attr.copy.missing_ok, detail))
+		{
+			Log(LOG_LEVEL_DEBUG, "lstat(%s) failed, but missing ok\n",
+			    newfrom);
+			continue;
+		}
+
                 Log(LOG_LEVEL_VERBOSE, "Can't stat '%s'. (cf_stat: %s)", newfrom, GetErrorStr());
                 if (conn != NULL &&
                     conn->conn_info->status != CONNECTIONINFO_STATUS_ESTABLISHED)
@@ -885,6 +901,16 @@ static PromiseResult SourceSearchAndCopy(EvalContext *ctx, const char *from, cha
         {
 	    if (cf_lstat(newfrom, &sb, attr.copy, conn, &detail) == -1)
             {
+		/* TODO: as we are recursing subdirectories, there can not be
+		 * distinguished between FILE_MISSING_OK_LEAF and
+		 * FILE_MISSING_OK_ALL */
+	        if (IsRemoteBadOk(attr.copy.missing_ok, detail))
+		{
+			Log(LOG_LEVEL_DEBUG, "lstat(%s) failed, but missing ok\n",
+			    newfrom);
+			continue;
+		}
+
                 Log(LOG_LEVEL_VERBOSE, "Can't stat '%s'. (cf_stat: %s)", newfrom, GetErrorStr());
                 if (conn != NULL &&
                     conn->conn_info->status != CONNECTIONINFO_STATUS_ESTABLISHED)
@@ -1026,6 +1052,13 @@ static PromiseResult VerifyCopy(EvalContext *ctx,
 
     if (found == -1)
     {
+        if (IsRemoteBadOk(attr.copy.missing_ok, detail))
+	{
+		Log(LOG_LEVEL_DEBUG, "*stat(%s) failed in verify, but missing ok\n",
+		    source);
+		return PROMISE_RESULT_NOOP;
+	}
+
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, attr,
              "Can't stat '%s' in verify copy", source);
         return PROMISE_RESULT_FAIL;
@@ -1039,14 +1072,18 @@ static PromiseResult VerifyCopy(EvalContext *ctx,
     if (S_ISDIR(ssb.st_mode))
     {
         PromiseResult result = PROMISE_RESULT_NOOP;
+	bool do_skip_copy = false;
 
         strcpy(sourcedir, source);
         AddSlash(sourcedir);
         strcpy(destdir, destination);
         AddSlash(destdir);
 
-        if ((dirh = AbstractDirOpen(sourcedir, attr.copy, conn, NULL)) == NULL)
+        if ((dirh = AbstractDirOpen(sourcedir, attr.copy, conn, &detail)) == NULL)
         {
+            if (IsRemoteBadOk(attr.copy.missing_ok, detail))
+		return PROMISE_RESULT_NOOP;
+
             cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, attr,
                  "Can't open directory '%s'. (opendir: %s)",
                  sourcedir, GetErrorStr());
@@ -1113,6 +1150,12 @@ static PromiseResult VerifyCopy(EvalContext *ctx,
             {
                 if (cf_stat(sourcefile, &ssb, attr.copy, conn, &detail) == -1)
 		{
+			/* noop */
+		} else if (IsRemoteBadOk(attr.copy.missing_ok, detail)) {
+		    Log(LOG_LEVEL_DEBUG, "stat(%s) failed, but missing ok\n",
+			sourcefile);
+		    do_skip_copy = true;
+		} else {
                     cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, attr,
                          "Can't stat source file (notlinked) '%s'. (stat: %s)",
                          sourcefile, GetErrorStr());
@@ -1123,6 +1166,12 @@ static PromiseResult VerifyCopy(EvalContext *ctx,
             {
 		if (cf_lstat(sourcefile, &ssb, attr.copy, conn, &detail) == -1)
 		{
+			/* noop */
+		} else if (IsRemoteBadOk(attr.copy.missing_ok, detail)) {
+		    Log(LOG_LEVEL_DEBUG, "lstat(%s) failed, but missing ok\n",
+			sourcefile);
+		    do_skip_copy = true;
+		} else {
                     cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, attr,
                          "Can't stat source file '%s'. (lstat: %s)",
                          sourcefile, GetErrorStr());
@@ -1130,9 +1179,10 @@ static PromiseResult VerifyCopy(EvalContext *ctx,
                 }
             }
 
-            result = PromiseResultUpdate(
-                result, CfCopyFile(ctx, sourcefile, destfile, ssb,
-                                   attr, pp, inode_cache, conn));
+	    if (!do_skip_copy)
+		    result = PromiseResultUpdate(
+			    result, CfCopyFile(ctx, sourcefile, destfile, ssb,
+					       attr, pp, inode_cache, conn));
         }
 
         AbstractDirClose(dirh);
@@ -2639,6 +2689,14 @@ static PromiseResult CopyFileSources(EvalContext *ctx, char *destination, Attrib
 
     if (cf_stat(BufferData(source), &ssb, attr.copy, conn, &detail) == -1)
     {
+	if (IsRemoteBadOk(attr.copy.missing_ok, detail))
+	{
+		Log(LOG_LEVEL_DEBUG, "stat(%s) failed, but missing ok\n",
+		    BufferData(source));
+		BufferDestroy(source);
+		return PROMISE_RESULT_NOOP;
+	}
+
         cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, attr,
              "Can't stat file '%s' on '%s' in files.copy_from promise",
              BufferData(source), conn ? conn->remoteip : "localhost");
@@ -2928,6 +2986,7 @@ PromiseResult ScheduleLinkChildrenOperation(EvalContext *ctx, char *destination,
     char promiserpath[CF_BUFSIZE], sourcepath[CF_BUFSIZE];
     struct stat lsb;
     int ret;
+    enum RemoteBadDetail detail;
 
     if ((ret = lstat(destination, &lsb)) != -1)
     {
@@ -2953,7 +3012,7 @@ PromiseResult ScheduleLinkChildrenOperation(EvalContext *ctx, char *destination,
         return result;
     }
 
-    if ((dirh = DirOpen(source)) == NULL)
+    if ((dirh = DirOpenCode(source, &detail)) == NULL)
     {
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, attr,
              "Can't open source of children to link '%s'. (opendir: %s)",
