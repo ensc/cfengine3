@@ -94,7 +94,7 @@ static void FileAutoDefine(EvalContext *ctx, char *destfile);
 static void TruncateFile(char *name);
 static void RegisterAHardLink(int i, char *value, Attributes attr, CompressedArray **inode_cache);
 static PromiseResult VerifyCopiedFileAttributes(EvalContext *ctx, const char *src, const char *dest, struct stat *sstat, struct stat *dstat, Attributes attr, const Promise *pp);
-static int cf_stat(const char *file, struct stat *buf, FileCopy fc, AgentConnection *conn);
+static int cf_stat(const char *file, struct stat *buf, FileCopy fc, AgentConnection *conn, enum RemoteBadDetail *detail);
 #ifndef __MINGW32__
 static int cf_readlink(EvalContext *ctx, char *sourcefile, char *linkbuf, int buffsize, Attributes attr, const Promise *pp, AgentConnection *conn, PromiseResult *result);
 #endif
@@ -864,7 +864,7 @@ static PromiseResult SourceSearchAndCopy(EvalContext *ctx, const char *from, cha
             /* No point in checking if there are untrusted symlinks here,
                since this is from a trusted source, by definition */
 
-            if (cf_stat(newfrom, &sb, attr.copy, conn) == -1)
+	    if (cf_stat(newfrom, &sb, attr.copy, conn, &detail) == -1)
             {
                 Log(LOG_LEVEL_VERBOSE, "Can't stat '%s'. (cf_stat: %s)", newfrom, GetErrorStr());
                 if (conn != NULL &&
@@ -883,7 +883,7 @@ static PromiseResult SourceSearchAndCopy(EvalContext *ctx, const char *from, cha
         }
         else
         {
-            if (cf_lstat(newfrom, &sb, attr.copy, conn) == -1)
+	    if (cf_lstat(newfrom, &sb, attr.copy, conn, &detail) == -1)
             {
                 Log(LOG_LEVEL_VERBOSE, "Can't stat '%s'. (cf_stat: %s)", newfrom, GetErrorStr());
                 if (conn != NULL &&
@@ -1012,15 +1012,16 @@ static PromiseResult VerifyCopy(EvalContext *ctx,
     struct stat ssb, dsb;
     const struct dirent *dirp;
     int found;
+    enum RemoteBadDetail detail;
 
     if (attr.copy.link_type == FILE_LINK_TYPE_NONE)
     {
         Log(LOG_LEVEL_DEBUG, "Treating links as files for '%s'", source);
-        found = cf_stat(source, &ssb, attr.copy, conn);
+        found = cf_stat(source, &ssb, attr.copy, conn, &detail);
     }
     else
     {
-        found = cf_lstat(source, &ssb, attr.copy, conn);
+        found = cf_lstat(source, &ssb, attr.copy, conn, &detail);
     }
 
     if (found == -1)
@@ -1110,8 +1111,8 @@ static PromiseResult VerifyCopy(EvalContext *ctx,
 
             if (attr.copy.link_type == FILE_LINK_TYPE_NONE)
             {
-                if (cf_stat(sourcefile, &ssb, attr.copy, conn) == -1)
-                {
+                if (cf_stat(sourcefile, &ssb, attr.copy, conn, &detail) == -1)
+		{
                     cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, attr,
                          "Can't stat source file (notlinked) '%s'. (stat: %s)",
                          sourcefile, GetErrorStr());
@@ -1120,8 +1121,8 @@ static PromiseResult VerifyCopy(EvalContext *ctx,
             }
             else
             {
-                if (cf_lstat(sourcefile, &ssb, attr.copy, conn) == -1)
-                {
+		if (cf_lstat(sourcefile, &ssb, attr.copy, conn, &detail) == -1)
+		{
                     cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, attr,
                          "Can't stat source file '%s'. (lstat: %s)",
                          sourcefile, GetErrorStr());
@@ -2625,6 +2626,7 @@ static PromiseResult CopyFileSources(EvalContext *ctx, char *destination, Attrib
     char vbuff[CF_BUFSIZE];
     struct stat ssb, dsb;
     struct timespec start;
+    enum RemoteBadDetail detail;
 
     if (conn != NULL && (!conn->authenticated))
     {
@@ -2635,7 +2637,7 @@ static PromiseResult CopyFileSources(EvalContext *ctx, char *destination, Attrib
         return PROMISE_RESULT_FAIL;
     }
 
-    if (cf_stat(BufferData(source), &ssb, attr.copy, conn) == -1)
+    if (cf_stat(BufferData(source), &ssb, attr.copy, conn, &detail) == -1)
     {
         cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, attr,
              "Can't stat file '%s' on '%s' in files.copy_from promise",
@@ -3487,24 +3489,51 @@ static void RegisterAHardLink(int i, char *value, Attributes attr, CompressedArr
     }
 }
 
-static int cf_stat(const char *file, struct stat *buf, FileCopy fc, AgentConnection *conn)
+static int cf_stat(const char *file, struct stat *buf, FileCopy fc, AgentConnection *conn, enum RemoteBadDetail *detail)
 {
+    int rc;
     if (!file)
     {
-        return -1;
+	rc = -1;
     }
 
     if (conn == NULL)
     {
-        return stat(file, buf);
+        rc = stat(file, buf);
+	if (rc < 0) {
+		enum RemoteBadDetail	tmp_detail;
+
+		switch (errno) {
+		case ENOENT:
+			tmp_detail = REMOTE_BAD_DETAIL_ENOENT;
+			break;
+
+		case ENOTDIR:
+			tmp_detail = REMOTE_BAD_DETAIL_ENOTDIR;
+			break;
+
+		case EACCES:
+			tmp_detail = REMOTE_BAD_DETAIL_EPERM;
+			break;
+
+		default:
+			tmp_detail = REMOTE_BAD_DETAIL_UNSPECIFIED;
+			break;
+		}
+
+		if (detail)
+			*detail = tmp_detail;
+	}
     }
     else
     {
         assert(fc.servers != NULL &&
                strcmp(RlistScalarValue(fc.servers), "localhost") != 0);
 
-        return cf_remote_stat(conn, fc.encrypt, file, buf, "file", NULL);
+        rc = cf_remote_stat(conn, fc.encrypt, file, buf, "file", detail);
     }
+
+    return rc;
 }
 
 #ifndef __MINGW32__
