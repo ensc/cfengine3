@@ -52,6 +52,6 @@ int cf_lstat(const char *file, struct stat *buf, FileCopy fc, AgentConnection *c
     else
     {
         assert(fc.servers && strcmp(fc.servers->val.item, "localhost"));
-        return cf_remote_stat(conn, fc.encrypt, file, buf, "link");
+        return cf_remote_stat(conn, fc.encrypt, file, buf, "link", NULL);
     }
 }
