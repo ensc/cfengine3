@@ -1,0 +1,176 @@
+#######################################################
+#
+# Tries to copy using TLS (which is default now), from two servers: one
+# with the default TLS ciphers list and another with a non-default very
+# restricted one.
+#
+# It should fail since we are setting "tls_ciphers" to a cipher missing
+# in both servers.
+#
+#######################################################
+
+body common control
+{
+	      inputs => { "../../default.cf.sub" };
+	      bundlesequence  => { default("$(this.promise_filename)") };
+}
+
+bundle agent init
+{
+}
+
+bundle agent test_body_once(dst, src, class, missing_ok)
+{
+    vars:
+	    "baseclass" string	=> concat(${class}, "_", ${missing_ok});
+	    "failclass" string	=> concat(${baseclass}, "_failed");
+
+    files:
+	    "${G.testdir}/out/${dst}-${missing_ok}"
+	      copy_from	=> dcs_remote_cp_X("${src}", "127.0.0.1", ${missing_ok}),
+	      classes	=> classes_generic(${baseclass});
+
+    reports:
+	debug_mode::
+	    "${class}: ${missing_ok} => ok"
+	    unless	=> ${failclass};
+
+	    "${class}: ${missing_ok} => bad"
+	    ifvarclass	=> ${failclass};
+}
+
+bundle agent test_body_rec(dst, src, class, missing_ok)
+{
+    vars:
+	    "baseclass" string	=> concat(${class}, "_", ${missing_ok});
+	    "failclass" string	=> concat(${baseclass}, "_failed");
+
+    files:
+	    "${G.testdir}/out/${dst}-${missing_ok}"
+	      copy_from		=> dcs_remote_cp_X("${src}", "127.0.0.1", ${missing_ok}),
+	      classes		=> classes_generic(${baseclass}),
+	      depth_search	=> recurse("inf");
+
+    reports:
+	debug_mode::
+	    "${class}: ${missing_ok} => ok"
+	    unless	=> ${failclass};
+
+	    "${class}: ${missing_ok} => bad"
+	    ifvarclass	=> ${failclass};
+}
+
+
+bundle agent test_body(dst, src, class)
+{
+    methods:
+	    "any" usebundle	=> test_body_once(${dst}, ${src}, ${class}, "all");
+	    "any" usebundle	=> test_body_once(${dst}, ${src}, ${class}, "leaf");
+	    "any" usebundle	=> test_body_once(${dst}, ${src}, ${class}, "no");
+}
+
+bundle agent test_recursive(dst, src, class)
+{
+    methods:
+	    "any" usebundle	=> test_body_rec(${dst}, ${src}, ${class}, "all");
+	    "any" usebundle	=> test_body_rec(${dst}, ${src}, ${class}, "leaf");
+	    "any" usebundle	=> test_body_rec(${dst}, ${src}, ${class}, "no");
+}
+
+
+bundle agent test
+{
+    methods:
+	    "any" usebundle	=> test_body("destfile1", "sub0/source_file", "fileok");
+	    "any" usebundle	=> test_body("destfile2", "sub0/xxx",         "filemissing");
+	    "any" usebundle	=> test_body("destfile3", "no-dir/xxx",       "dirmissing");
+
+	    "any" usebundle	=> test_recursive("new-dir", "sub0",     "newdir");
+	    "any" usebundle	=> test_recursive("bad-dir", "noexist",  "baddir");
+}
+
+#######################################################
+
+bundle agent check_exp(base_file, xtra, class, exp_all, exp_leaf, exp_no)
+{
+    classes:
+	    "__exists_all"
+	      expression => fileexists("${G.testdir}/out/${base_file}-all${xtra}");
+	    "__exists_leaf"
+	      expression => fileexists("${G.testdir}/out/${base_file}-leaf${xtra}");
+	    "__exists_no"
+	      expression => fileexists("${G.testdir}/out/${base_file}-no${xtra}");
+
+	    "_check_exists"
+	      comment		=> "when on copy operation succeeds, it is expected that all files exist",
+	      ifvarclass	=> ${exp_no},
+	      and		=> { __exists_all, __exists_leaf, __exists_no };
+
+	    "_check_exists"
+	      comment		=> "when on copy operation succeeds, it is expected that no files exist",
+	      unless		=> ${exp_no},
+	      expression	=> "!(__exists_all|__exists_leaf|__exists_no)";
+
+	    "__check_all"
+	      xor		=> { "${class}_all_failed", ${exp_all} };
+
+	    "__check_leaf"
+	      xor		=> { "${class}_leaf_failed", ${exp_leaf} };
+
+	    "__check_no"
+	      xor		=> { "${class}_no_failed", ${exp_no} };
+
+	    "_check_op"
+	      and		=> { __check_all, __check_leaf, __check_no };
+
+	    "check_${class}"
+	      scope		=> "namespace",
+	      and		=> { _check_exists, _check_op };
+
+    reports:
+	    "class ${class} failed (op)"
+	      unless	=> "_check_op";
+
+	    "class ${class} failed (existance)"
+	      unless	=> "_check_exists";
+
+	    "class ${class} failed"
+	      unless	=> "check_${class}";
+
+	verbose_mode::
+	    "class ${class} succeedded"
+	      if	=> "check_${class}";
+}
+
+bundle agent check
+{
+    classes:
+	    "dummy"   expression => regextract("(.*)\.sub", $(this.promise_filename), "fn");
+
+    methods:
+	    "res0" usebundle	=> check_exp("destfile1", "", "fileok",      "any",  "any",  "any");
+	    "res1" usebundle	=> check_exp("destfile2", "", "filemissing", "any",  "any",  "none");
+	    "res2" usebundle	=> check_exp("destfile3", "", "dirmissing",  "any",  "none", "none");
+
+	    "res3" usebundle	=> check_exp("new-dir", "/source_file", "newdir",  "any",  "any", "any");
+	    "res4" usebundle	=> check_exp("bad-dir", "/source_file", "baddir",  "any",  "any", "none");
+
+    reports:
+	check_fileok.check_filemissing.check_dirmissing.check_newdir.check_baddir::
+	    "$(fn[1]) Pass";
+}
+
+
+body copy_from dcs_remote_cp_X(from,server, missing_ok)
+# @brief Download a file from a remote server. They server is always trusted.
+#
+# @param from The location of the file on the remote server
+# @param server The hostname or IP of the server from which to download
+{
+	      servers     => { "$(server)" };
+	      source      => "$(G.testdir)/dir/$(from)";
+	      compare     => "mtime";
+	      trustkey    => "true";
+	      missing_ok  => "${missing_ok}";
+	      portnumber  => "9876"; # localhost_open
+}
