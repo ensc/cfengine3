@@ -14,7 +14,9 @@ bundle agent test
       "any" usebundle => dcs_fini("$(G.testdir)/nodir/does_not_exist");
 
       # source file
-      "any" usebundle => file_make("$(G.testdir)/source_file",
+      "any" usebundle => file_make("$(G.testdir)/dir/no-dir",
+                                   "file to trigger ENOTDIR");
+      "any" usebundle => file_make("$(G.testdir)/dir/sub0/source_file",
                                    "Source file to copy, always fresh, $(sys.date)");
       "any" usebundle => file_make("$(G.testdir)/out/dummy",
                                    "dummy file to create output dir");
