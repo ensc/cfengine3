@@ -31,6 +31,10 @@ bundle server access_rules()
         admit    => { "127.0.0.1", "::1" },
         shortcut => "simple_source";
 
+      "$(G.testdir)/dir"
+        admit    => { "127.0.0.1", "::1" },
+        shortcut => "simple_source";
+
       "$(G.testdir)/$(connection.ip).txt"
         admit_ips => { "$(connection.ip)" },
         shortcut  => "expand_ip_source";
