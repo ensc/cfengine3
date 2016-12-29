@@ -56,14 +56,26 @@ static const int CF_NOSIZE = -1;
 
 /* NOTE: Always Log(LOG_LEVEL_INFO) before calling RefuseAccess(), so that
  * some clue is printed in the cf-serverd logs. */
-void RefuseAccess(ServerConnectionState *conn, char *errmesg)
+void RefuseAccessDetail(ServerConnectionState *conn, char *errmesg,
+                        enum RemoteBadDetail detail)
 {
-    SendTransaction(conn->conn_info, CF_FAILEDSTR, 0, CF_DONE);
+    SendTransactionCode(conn->conn_info, CF_FAILEDSTR, 0, CF_DONE, detail);
 
-    /* TODO remove logging, it's done elsewhere. */
-    Log(LOG_LEVEL_VERBOSE, "REFUSAL to user='%s' of request: %s",
-        NULL_OR_EMPTY(conn->username) ? "?" : conn->username,
-        errmesg);
+    switch (detail) {
+    case REMOTE_BAD_DETAIL_UNSPECIFIED:
+        /* TODO remove logging, it's done elsewhere. */
+        Log(LOG_LEVEL_VERBOSE, "REFUSAL to user='%s' of request: %s",
+            NULL_OR_EMPTY(conn->username) ? "?" : conn->username,
+            errmesg);
+        break;
+
+    default:
+        Log(LOG_LEVEL_DEBUG,
+            "REFUSAL to user='%s' of request: %s (%d)",
+            NULL_OR_EMPTY(conn->username) ? "?" : conn->username,
+            errmesg, detail);
+        break;
+    }
 }
 
 bool IsUserNameValid(const char *username)

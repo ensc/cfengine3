@@ -35,8 +35,14 @@
 #include <cf3.defs.h>                              /* EvalContext */
 #include <server.h>                                /* ServerConnectionState */
 
+void RefuseAccessDetail(ServerConnectionState *conn, char *errmesg,
+			enum RemoteBadDetail detail);
+static inline void
+RefuseAccess(ServerConnectionState *conn, char *errmesg)
+{
+	RefuseAccessDetail(conn, errmesg, 0);
+}
 
-void RefuseAccess(ServerConnectionState *conn, char *errmesg);
 int AllowedUser(char *user);
 /* Checks whatever user name contains characters we are considering to be invalid */
 bool IsUserNameValid(const char *username);
