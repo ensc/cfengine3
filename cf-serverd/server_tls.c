@@ -579,7 +579,7 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
 
     /* We already encrypt because of the TLS layer, no need to encrypt more. */
     const int encrypted = 0;
-    enum RemoteBadDetail detail = REMOTE_BAD_DETAIL_UNSPECIFIED;
+    enum RemoteBadDetail detail;
 
     /* Legacy stuff only for old protocol. */
     assert(conn->rsa_auth == 1);
@@ -654,7 +654,6 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
         if (ret != 2 ||
             get_args.buf_size <= 0 || get_args.buf_size > CF_BUFSIZE)
         {
-	    detail = REMOTE_BAD_DETAIL_EINVAL;
             goto protocol_error;
         }
 
@@ -670,14 +669,13 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
                                      KeyPrintableHash(ConnectionInfoKey(conn->conn_info)));
         if (zret == (size_t) -1)
         {
-	    detail = REMOTE_BAD_DETAIL_EINVAL;
             goto protocol_error;
         }
 
         zret = PreprocessRequestPath(filename, sizeof(filename), &detail);
         if (zret == (size_t) -1)
         {
-            RefuseAccess(conn, recvbuffer);
+            RefuseAccessDetail(conn, recvbuffer, detail);
             return true;
         }
 
@@ -719,7 +717,6 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
         int ret = sscanf(recvbuffer, "OPENDIR %[^\n]", filename);
         if (ret != 1)
         {
-	    detail = REMOTE_BAD_DETAIL_EINVAL;
             goto protocol_error;
         }
 
@@ -734,14 +731,13 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
                                       KeyPrintableHash(ConnectionInfoKey(conn->conn_info)));
         if (zret == (size_t) -1)
         {
-	    detail = REMOTE_BAD_DETAIL_EINVAL;
             goto protocol_error;
         }
 
         zret = PreprocessRequestPath(filename, sizeof(filename) - 1, &detail);
         if (zret == (size_t) -1)
         {
-            RefuseAccess(conn, recvbuffer);
+            RefuseAccessDetail(conn, recvbuffer, detail);
             return true;
         }
 
@@ -773,7 +769,6 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
 
         if (ret != 2 || filename[0] == '\0')
         {
-	    detail = REMOTE_BAD_DETAIL_EINVAL;
             goto protocol_error;
         }
 
@@ -800,14 +795,13 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
                                       KeyPrintableHash(ConnectionInfoKey(conn->conn_info)));
         if (zret == (size_t) -1)
         {
-	    detail = REMOTE_BAD_DETAIL_EINVAL;
             goto protocol_error;
         }
 
         zret = PreprocessRequestPath(filename, sizeof(filename) - 1, &detail);
         if (zret == (size_t) -1)
         {
-            RefuseAccess(conn, recvbuffer);
+            RefuseAccessDetail(conn, recvbuffer, detail);
             return true;
         }
 
@@ -855,7 +849,6 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
         int ret = sscanf(recvbuffer, "MD5 %[^\n]", filename);
         if (ret != 1)
         {
-	    detail = REMOTE_BAD_DETAIL_EINVAL;
             goto protocol_error;
         }
 
@@ -871,14 +864,13 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
                                      KeyPrintableHash(ConnectionInfoKey(conn->conn_info)));
         if (zret == (size_t) -1)
         {
-	    detail = REMOTE_BAD_DETAIL_EINVAL;
             goto protocol_error;
         }
 
         zret = PreprocessRequestPath(filename, sizeof(filename), &detail);
         if (zret == (size_t) -1)
         {
-            RefuseAccess(conn, recvbuffer);
+            RefuseAccessDetail(conn, recvbuffer, detail);
             return true;
         }
 
@@ -916,7 +908,6 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
         int ret = sscanf(recvbuffer, "VAR %255[^\n]", var);
         if (ret != 1)
         {
-	    detail = REMOTE_BAD_DETAIL_EINVAL;
             goto protocol_error;
         }
 
@@ -940,7 +931,6 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
         int ret = sscanf(recvbuffer, "CONTEXT %255[^\n]", client_regex);
         if (ret != 1)
         {
-	    detail = REMOTE_BAD_DETAIL_EINVAL;
             goto protocol_error;
         }
 
@@ -999,7 +989,6 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
         int ret2 = sscanf(recvbuffer, "QUERY %127s", name);
         if (ret1 != 1 || ret2 != 1)
         {
-	    detail = REMOTE_BAD_DETAIL_EINVAL;
             goto protocol_error;
         }
 
@@ -1051,21 +1040,8 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
 
 protocol_error:
     strcpy(sendbuffer, "BAD: Request denied");
-    SendTransactionCode(conn->conn_info, sendbuffer, 0, CF_DONE, detail);
-
-    /* TODO: this is clumpsy; we should set the return code explicitly instead
-     * of checking 'detail' */
-    switch (detail) {
-    case REMOTE_BAD_DETAIL_EINVAL:
-    case REMOTE_BAD_DETAIL_UNSPECIFIED:
-	    Log(LOG_LEVEL_INFO,
-		"Closing connection due to illegal request: %s (-> #%u)", recvbuffer,
-		detail);
-	    return false;
-
-    default:
-	    Log(LOG_LEVEL_DEBUG,
-		"Operation failed: %s (-> #%u)", recvbuffer, detail);
-	    return true;
-    }
+    SendTransaction(conn->conn_info, sendbuffer, 0, CF_DONE);
+    Log(LOG_LEVEL_INFO,
+        "Closing connection due to illegal request: %s", recvbuffer);
+    return false;
 }
