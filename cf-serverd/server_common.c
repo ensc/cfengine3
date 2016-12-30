@@ -1441,8 +1441,9 @@ size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size,
         }
         else
         {
-	    int err = errno;
-            Log(LOG_LEVEL_INFO,
+            int err = errno;
+
+            Log((err == ENOENT) ? LOG_LEVEL_DEBUG : LOG_LEVEL_INFO,
                 "Failed to canonicalise filename '%s' (realpath: %s)",
                 reqpath, GetErrorStr());
 
