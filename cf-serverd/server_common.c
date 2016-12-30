@@ -1437,7 +1437,7 @@ size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size,
         if ((lstat(reqpath, &statbuf) == 0) && S_ISLNK(statbuf.st_mode))
         {
             Log(LOG_LEVEL_VERBOSE, "Requested file is a dead symbolic link (filename: %s)", reqpath);
-            strlcpy(dst, reqpath, CF_BUFSIZE);
+            return_bad(detail, REMOTE_BAD_DETAIL_ENOENT);
         }
         else
         {
