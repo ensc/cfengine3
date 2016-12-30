@@ -56,7 +56,7 @@ static const Sock ECGSOCKS[] =     /* extended to map old to new using enum */
     {"138", "netbiosdgm", ob_netbiosdgm_in, ob_netbiosdgm_out},
     {"139", "netbiosssn", ob_netbiosssn_in, ob_netbiosssn_out},
     {"445", "microsoft_ds", ob_microsoft_ds_in, ob_microsoft_ds_out},
-    {"5308", "cfengine", ob_cfengine_in, ob_cfengine_out},
+    {"5309", "cfengine3", ob_cfengine_in, ob_cfengine_out},
     {"2049", "nfsd", ob_nfsd_in, ob_nfsd_out},
     {"25", "smtp", ob_smtp_in, ob_smtp_out},
     {"80", "www", ob_www_in, ob_www_out},

@@ -47,7 +47,7 @@
 #include <lastseen.h>                                            /* LastSaw */
 
 
-#define CFENGINE_SERVICE "cfengine"
+#define CFENGINE_SERVICE "cfengine3"
 
 
 /**
@@ -73,8 +73,8 @@ bool cfnet_IsInitialized()
 #define MAX_PORT_NUMBER 65535   /* 2^16 - 1 */
 
 /* These should only be modified by the two functions below! */
-int CFENGINE_PORT = 5308;
-char CFENGINE_PORT_STR[16] = "5308";
+int CFENGINE_PORT = 5309;
+char CFENGINE_PORT_STR[16] = "5309";
 
 void DetermineCfenginePort()
 {

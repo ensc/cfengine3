@@ -125,7 +125,7 @@ void EvalContextSetPolicyServer(EvalContext *ctx, const char *new_policy_server)
                                       CF_DATA_TYPE_STRING,
                                       "source=bootstrap" );
     }
-    else // Default value (CFENGINE_PORT_STR = "5308") is set
+    else // Default value (CFENGINE_PORT_STR = "5309") is set
     {
         EvalContextVariablePutSpecial( ctx, SPECIAL_SCOPE_SYS,
                                        "policy_hub_port",
