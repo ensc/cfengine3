@@ -46,7 +46,7 @@
 #include <lastseen.h>                                            /* LastSaw */
 
 
-#define CFENGINE_SERVICE "cfengine"
+#define CFENGINE_SERVICE "cfengine3"
 
 
 /**
@@ -69,8 +69,8 @@ bool cfnet_IsInitialized()
     return TLSClientIsInitialized();
 }
 
-int CFENGINE_PORT = 5308;
-char CFENGINE_PORT_STR[16] = "5308";
+int CFENGINE_PORT = 5309;
+char CFENGINE_PORT_STR[16] = "5309";
 
 void DetermineCfenginePort()
 {

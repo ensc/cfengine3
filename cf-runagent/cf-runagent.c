@@ -460,7 +460,7 @@ static int HailServer(const EvalContext *ctx, const GenericAgentConfig *config,
     }
     if (port == NULL)
     {
-        port = "5308";
+        port = "5309";
     }
 
     char ipaddr[CF_MAX_IP_LEN];
