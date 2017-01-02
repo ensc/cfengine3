@@ -706,9 +706,7 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
         get_args.replybuff = sendbuffer;
         get_args.replyfile = filename;
 
-        CfGetFile(&get_args);
-
-        return true;
+        return CfGetFile(&get_args);
     }
     case PROTOCOL_COMMAND_OPENDIR:
     {
