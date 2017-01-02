@@ -396,13 +396,14 @@ static void FailedTransfer(ConnectionInfo *connection)
     }
 }
 
-void CfGetFile(ServerFileGetState *args)
+bool CfGetFile(ServerFileGetState *args)
 {
     int fd;
     off_t n_read, total = 0, sendlen = 0, count = 0;
     char sendbuffer[CF_BUFSIZE + 256], filename[CF_BUFSIZE];
     struct stat sb;
     int blocksize = 2048;
+    bool rc = false;
 
     ConnectionInfo *conn_info = args->conn->conn_info;
 
@@ -428,7 +429,7 @@ void CfGetFile(ServerFileGetState *args)
         {
             TLSSend(ConnectionInfoSSL(conn_info), sendbuffer, args->buf_size);
         }
-        return;
+        return false;
     }
 
 /* File transfer */
@@ -470,6 +471,7 @@ void CfGetFile(ServerFileGetState *args)
 
             if (n_read == 0)
             {
+                rc = true;
                 break;
             }
             else
@@ -545,6 +547,8 @@ void CfGetFile(ServerFileGetState *args)
 
         close(fd);
     }
+
+    return rc;
 }
 
 void CfEncryptGetFile(ServerFileGetState *args)
