@@ -248,6 +248,7 @@ static const ConstraintSyntax perms_constraints[] =
     ConstraintSyntaxNewString("mode", CF_MODERANGE, "File permissions (like posix chmod)", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewStringList("owners", CF_USERRANGE, "List of acceptable owners or user ids, first is change target", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewBool("rxdirs", "true/false add execute flag for directories if read flag is set", SYNTAX_STATUS_NORMAL),
+    ConstraintSyntaxNewBool("nodirs", "true/false do not change directory permissions if flag is set", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewNull()
 };
 
