@@ -494,12 +494,18 @@ static FilePerms GetPermissionConstraints(const EvalContext *ctx, const Promise 
 
     p.findertype = PromiseGetConstraintAsRval(pp, "findertype", RVAL_TYPE_SCALAR);
     p.rxdirs = PromiseGetConstraintAsBoolean(ctx, "rxdirs", pp);
+    p.nodirs = PromiseGetConstraintAsBoolean(ctx, "nodirs", pp);
 
 // The default should be true
 
     if (!PromiseGetConstraintAsRval(pp, "rxdirs", RVAL_TYPE_SCALAR))
     {
         p.rxdirs = true;
+    }
+
+    if (!PromiseGetConstraintAsRval(pp, "nodirs", RVAL_TYPE_SCALAR))
+    {
+        p.nodirs = false;
     }
 
     return p;

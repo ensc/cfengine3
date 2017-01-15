@@ -1016,6 +1016,7 @@ typedef struct
     u_long plus_flags;          /* for *BSD chflags */
     u_long minus_flags;         /* for *BSD chflags */
     int rxdirs;
+    int nodirs;
 } FilePerms;
 
 /*************************************************************************/

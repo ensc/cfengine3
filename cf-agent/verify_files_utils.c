@@ -166,6 +166,10 @@ void VerifyFileLeaf(EvalContext *ctx, char *path, struct stat *sb, Attributes at
         {
             Log(LOG_LEVEL_VERBOSE, "Promise to skip base directory '%s'", path);
         }
+        else if (S_ISDIR(sb->st_mode) && attr.perms.nodirs)
+        {
+            Log(LOG_LEVEL_VERBOSE, "Promise to skip subdirectory '%s'", path);
+        }
         else
         {
             *result = PromiseResultUpdate(*result, VerifyFileAttributes(ctx, path, sb, attr, pp));
@@ -2541,6 +2545,9 @@ static bool CheckLinkSecurity(struct stat *sb, char *name)
 static PromiseResult VerifyCopiedFileAttributes(EvalContext *ctx, const char *src, const char *dest, struct stat *sstat,
                                                 struct stat *dstat, Attributes attr, const Promise *pp)
 {
+    if (S_ISDIR(sstat->st_mode) && attr.perms.nodirs)
+        return PROMISE_RESULT_NOOP;
+
 #ifndef __MINGW32__
     mode_t newplus, newminus;
     uid_t save_uid;
