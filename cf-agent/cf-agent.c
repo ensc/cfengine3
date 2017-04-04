@@ -1906,17 +1906,6 @@ static bool VerifyBootstrap(void)
         }
     }
 
-    // embedded failsafe.cf (bootstrap.c) contains a promise to start cf-execd (executed while running this cf-agent)
-    ClearProcessTable();
-    LoadProcessTable();
-
-    if (!IsProcessNameRunning(".*cf-execd.*"))
-    {
-        Log(LOG_LEVEL_ERR, "Bootstrapping failed, cf-execd is not running");
-        return false;
-    }
-
-
     Log(LOG_LEVEL_NOTICE, "Bootstrap to '%s' completed successfully!", policy_server);
     return true;
 }
