@@ -69,6 +69,14 @@ void RefuseAccessDetail(ServerConnectionState *conn, char *errmesg,
             errmesg);
         break;
 
+    case REMOTE_BAD_DETAIL_ENOENT:
+        Log(LOG_LEVEL_INFO, "NONEXISTING FILE in request: %s", errmesg);
+        break;
+
+    case REMOTE_BAD_DETAIL_ENOTDIR:
+        Log(LOG_LEVEL_INFO, "BAD PATH in request: %s", errmesg);
+        break;
+
     default:
         Log(LOG_LEVEL_DEBUG,
             "REFUSAL to user='%s' of request: %s (%d)",
