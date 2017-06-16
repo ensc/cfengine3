@@ -1471,6 +1471,16 @@ enum RemoteBadDetail
     REMOTE_BAD_DETAIL_EPERM = 1,
     /* invalid argument */
     REMOTE_BAD_DETAIL_EINVAL = 22,
+    /* some generic io error */
+    REMOTE_BAD_DETAIL_EIO = 5,
+    /* encrypted copy with key */
+    REMOTE_BAD_DETAIL_NOKEY = 126,
+    /* malformed remote message */
+    REMOTE_BAD_DETAIL_BADMSG = 74,
+    /* connection broken */
+    REMOTE_BAD_DETAIL_EPIPE = 32,
+
+    REMOTE_BAD_DETAIL_CLOCK_SKEW = 200,
 };
 
 enum FileMissingOk
