@@ -22,6 +22,8 @@
   included file COSL.txt.
 */
 
+#include <cf3.defs.h>
+
 #include <dir.h>
 #include <dir_priv.h>
 #include <file_lib.h>
@@ -37,14 +39,41 @@ struct Dir_
 static size_t GetNameMax(DIR *dirp);
 static size_t GetDirentBufferSize(size_t path_len);
 
-Dir *DirOpen(const char *dirname)
+Dir *DirOpenCode(const char *dirname, enum RemoteBadDetail *detail)
 {
     Dir *ret = xcalloc(1, sizeof(Dir));
     int safe_fd;
 
+    if (detail)
+	    /* there are too much 'return NULL' to set detail on a per-case
+	     * base */
+	    *detail = REMOTE_BAD_DETAIL_UNSPECIFIED;
+
     safe_fd = safe_open(dirname, O_RDONLY);
     if (safe_fd < 0)
     {
+        enum RemoteBadDetail tmp_detail;
+        switch (errno) {
+	case EACCES:
+		tmp_detail = REMOTE_BAD_DETAIL_EPERM;
+		break;
+
+	case ENOENT:
+		tmp_detail = REMOTE_BAD_DETAIL_ENOENT;
+		break;
+
+	case ENOTDIR:
+		tmp_detail = REMOTE_BAD_DETAIL_ENOTDIR;
+		break;
+
+	default:
+		tmp_detail = REMOTE_BAD_DETAIL_UNSPECIFIED;
+		break;
+	}
+
+	if (detail)
+		*detail = tmp_detail;
+
         free(ret);
         return NULL;
     }
@@ -52,6 +81,9 @@ Dir *DirOpen(const char *dirname)
     ret->dirh = opendir(dirname);
     if (ret->dirh == NULL)
     {
+        if (errno == ENOTDIR && detail)
+		*detail = REMOTE_BAD_DETAIL_ENOENT;
+
         close(safe_fd);
         free(ret);
         return NULL;

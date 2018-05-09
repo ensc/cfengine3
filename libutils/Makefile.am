@@ -25,7 +25,7 @@ noinst_LTLIBRARIES = libutils.la
 
 # TODO remove the openssl dependency! It's only there for base64 encoding.
 AM_CFLAGS   = $(PCRE_CFLAGS) $(OPENSSL_CFLAGS)
-AM_CPPFLAGS = $(PCRE_CPPFLAGS) $(OPENSSL_CPPFLAGS)
+AM_CPPFLAGS = $(PCRE_CPPFLAGS) $(OPENSSL_CPPFLAGS) -I$(srcdir)/../libpromises -I$(srcdir)/../libcfnet
 AM_LDFLAGS  = $(PCRE_LDFLAGS) $(OPENSSL_LDFLAGS)
 
 libutils_la_LIBADD = ../libcompat/libcompat.la
@@ -75,6 +75,7 @@ libutils_la_SOURCES = \
 	regex.c regex.h \
 	encode.c encode.h \
 	pcre_wrap.c pcre_wrap.h \
+	libcrypto-compat.c libcrypto-compat.h \
 	printsize.h
 
 if !NT

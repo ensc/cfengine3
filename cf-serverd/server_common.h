@@ -35,14 +35,20 @@
 #include <cf3.defs.h>                              /* EvalContext */
 #include <server.h>                                /* ServerConnectionState */
 
+void RefuseAccessDetail(ServerConnectionState *conn, char *errmesg,
+			enum RemoteBadDetail detail);
+static inline void
+RefuseAccess(ServerConnectionState *conn, char *errmesg)
+{
+	RefuseAccessDetail(conn, errmesg, 0);
+}
 
-void RefuseAccess(ServerConnectionState *conn, char *errmesg);
 int AllowedUser(char *user);
 /* Checks whatever user name contains characters we are considering to be invalid */
 bool IsUserNameValid(const char *username);
 int MatchClasses(const EvalContext *ctx, ServerConnectionState *conn);
 void Terminate(ConnectionInfo *connection);
-void CfGetFile(ServerFileGetState *args);
+bool CfGetFile(ServerFileGetState *args);
 void CfEncryptGetFile(ServerFileGetState *args);
 int StatFile(ServerConnectionState *conn, char *sendbuffer, char *ofilename);
 void ReplyServerContext(ServerConnectionState *conn, int encrypted, Item *classes);
@@ -64,7 +70,7 @@ size_t ShortcutsExpand(char *path, size_t path_size,
                        const StringMap *shortcuts,
                        const char *ipaddr, const char *hostname,
                        const char *key);
-size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size);
+size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size, enum RemoteBadDetail *detail);
 void SetConnIdentity(ServerConnectionState *conn, const char *username);
 bool DoExec2(const EvalContext *ctx,
              ServerConnectionState *conn,

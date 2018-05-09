@@ -26,6 +26,7 @@
 
 #include <platform.h>
 #include <cfnet.h>
+#include <cf3.defs.h>
 
 
 typedef enum
@@ -59,12 +60,15 @@ struct Stat_
     int cf_nlink;               /* Number of hard links */
     int cf_ino;                 /* inode number on server */
     dev_t cf_dev;               /* device number */
+    enum RemoteBadDetail bad_detail;
     Stat *next;
 };
 
+enum RemoteBadDetail;
 
 int cf_remote_stat(AgentConnection *conn, bool encrypt, const char *file,
-                   struct stat *statbuf, const char *stattype);
+                   struct stat *statbuf, const char *stattype,
+		   enum RemoteBadDetail *detail);
 const Stat *StatCacheLookup(const AgentConnection *conn, const char *file_name,
                             const char *server_name);
 
