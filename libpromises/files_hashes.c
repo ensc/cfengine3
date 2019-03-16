@@ -26,6 +26,7 @@
 
 #include <openssl/bn.h>                                         /* BN_* */
 #include <openssl/evp.h>                                        /* EVP_* */
+#include <libcrypto-compat.h>
 
 #include <dbm_api.h>
 #include <files_interfaces.h>
