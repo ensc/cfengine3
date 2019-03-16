@@ -47,7 +47,7 @@
 #include <lastseen.h>                                            /* LastSaw */
 
 
-#define CFENGINE_SERVICE "cfengine"
+#define CFENGINE_SERVICE "cfengine3"
 
 
 /**
@@ -73,8 +73,8 @@ bool cfnet_IsInitialized()
 #define MAX_PORT_NUMBER 65535   /* 2^16 - 1 */
 
 /* These should only be modified by the two functions below! */
-int CFENGINE_PORT = 5308;
-char CFENGINE_PORT_STR[16] = "5308";
+int CFENGINE_PORT = 5309;
+char CFENGINE_PORT_STR[16] = "5309";
 
 void DetermineCfenginePort()
 {
@@ -323,15 +323,23 @@ void DisconnectServer(AgentConnection *conn)
 
 /*********************************************************************/
 
-/* Returning NULL (an empty list) does not mean empty directory but ERROR,
- * since every directory has to contain at least . and .. */
-Item *RemoteDirList(const char *dirname, bool encrypt, AgentConnection *conn)
+/* Returning NULL (an empty list) and detail == NULL does not mean empty
+ * directory but ERROR, since every directory has to contain at least . and
+ * ..
+ *
+ * When 'detail != NULL' and directory does not exist, function will return
+ * non-NULL with */
+Item *RemoteDirList(const char *dirname, bool encrypt, AgentConnection *conn,
+		    enum RemoteBadDetail *detail)
 {
     char sendbuffer[CF_BUFSIZE];
     char recvbuffer[CF_BUFSIZE];
     char in[CF_BUFSIZE];
     char out[CF_BUFSIZE];
     int cipherlen = 0, tosend;
+
+    if (detail)
+	    *detail = REMOTE_BAD_DETAIL_UNSPECIFIED;
 
     if (strlen(dirname) > CF_BUFSIZE - 20)
     {
@@ -380,7 +388,7 @@ Item *RemoteDirList(const char *dirname, bool encrypt, AgentConnection *conn)
     while (true)
     {
         /* TODO check the CF_MORE flag, no need for CFD_TERMINATOR. */
-        int nbytes = ReceiveTransaction(conn->conn_info, recvbuffer, NULL);
+	int nbytes = ReceiveTransactionCode(conn->conn_info, recvbuffer, NULL, detail);
 
         /* If recv error or socket closed before receiving CFD_TERMINATOR. */
         if (nbytes == -1)
@@ -413,7 +421,12 @@ Item *RemoteDirList(const char *dirname, bool encrypt, AgentConnection *conn)
 
         if (BadProtoReply(recvbuffer))
         {
-            Log(LOG_LEVEL_INFO, "%s", recvbuffer + strlen("BAD: "));
+            if (detail)
+                Log(LOG_LEVEL_INFO, "%s (%u)", recvbuffer + strlen("BAD: "),
+		    (unsigned int)(*detail));
+	    else
+		Log(LOG_LEVEL_INFO, "%s", recvbuffer + strlen("BAD: "));
+
             goto err;
         }
 

@@ -29,13 +29,23 @@
 
 
 #include <cfnet.h>
+#include <cf3.defs.h>
 
 
 extern uint32_t bwlimit_kbytes;
 
+int SendTransactionCode(ConnectionInfo *conn_info, const char *buffer, int len, char status, enum RemoteBadDetail code);
+int ReceiveTransactionCode(ConnectionInfo *conn_info, char *buffer, int *more, enum RemoteBadDetail *code);
 
-int SendTransaction(ConnectionInfo *conn_info, const char *buffer, int len, char status);
-int ReceiveTransaction(ConnectionInfo *conn_info, char *buffer, int *more);
+inline static int SendTransaction(ConnectionInfo *conn_info, const char *buffer, int len, char status)
+{
+    return SendTransactionCode(conn_info, buffer, len, status, 0);
+}
+
+inline static int ReceiveTransaction(ConnectionInfo *conn_info, char *buffer, int *more)
+{
+    return ReceiveTransactionCode(conn_info, buffer, more, NULL);
+}
 
 int SetReceiveTimeout(int fd, unsigned long ms);
 

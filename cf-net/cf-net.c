@@ -611,6 +611,7 @@ static int CFNetStat(ARG_UNUSED CFNetOptions *opts, const char *hostname, char *
 {
     assert(opts);
     char *file = args[1];
+    enum RemoteBadDetail detail;
     AgentConnection *conn = CFNetOpenConnection(hostname);// FIXME
     if (conn == NULL)
     {
@@ -618,10 +619,10 @@ static int CFNetStat(ARG_UNUSED CFNetOptions *opts, const char *hostname, char *
     }
     bool encrypt = true;
     struct stat sb;
-    int r = cf_remote_stat(conn, encrypt, file, &sb, "file");
+    int r = cf_remote_stat(conn, encrypt, file, &sb, "file", &detail);
     if (r != 0)
     {
-        printf("Could not stat: '%s'\n", file);
+        printf("Could not stat: '%s' (%d)\n", file, detail);
     }
     else
     {
@@ -655,6 +656,7 @@ typedef struct _GetFileData {
 
 static void *CFNetGetFile(void *arg)
 {
+    enum RemoteBadDetail detail;
     GetFileData *data = (GetFileData *) arg;
     AgentConnection *conn = CFNetOpenConnection(data->hostname);
     if (conn == NULL)
@@ -664,10 +666,10 @@ static void *CFNetGetFile(void *arg)
     }
 
     struct stat sb;
-    data->ret = cf_remote_stat(conn, true, data->remote_file, &sb, "file");
+    data->ret = cf_remote_stat(conn, true, data->remote_file, &sb, "file", &detail);
     if (data->ret != 0)
     {
-        printf("Could not stat: '%s'\n", data->remote_file);
+        printf("Could not stat: '%s' (%d)\n", data->remote_file, detail);
     }
     else
     {
@@ -865,6 +867,7 @@ static int CFNetOpenDir(ARG_UNUSED CFNetOptions *opts, const char *hostname, cha
     assert(opts);
     assert(hostname);
     assert(args);
+    enum RemoteBadDetail detail;
     AgentConnection *conn = CFNetOpenConnection(hostname);
     if (conn == NULL)
     {
@@ -884,7 +887,7 @@ static int CFNetOpenDir(ARG_UNUSED CFNetOptions *opts, const char *hostname, cha
 
     const char *remote_path = args[1];
 
-    Item *items = RemoteDirList(remote_path, false, conn);
+    Item *items = RemoteDirList(remote_path, false, conn, &detail);
     PrintDirs(items);
     CFNetDisconnect(conn);
     return 0;

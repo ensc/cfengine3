@@ -622,6 +622,7 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
 
     /* We already encrypt because of the TLS layer, no need to encrypt more. */
     const int encrypted = 0;
+    enum RemoteBadDetail detail;
 
     /* Legacy stuff only for old protocol. */
     assert(conn->rsa_auth == 1);
@@ -714,10 +715,10 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
             goto protocol_error;
         }
 
-        zret = PreprocessRequestPath(filename, sizeof(filename));
+        zret = PreprocessRequestPath(filename, sizeof(filename), &detail);
         if (zret == (size_t) -1)
         {
-            RefuseAccess(conn, recvbuffer);
+            RefuseAccessDetail(conn, recvbuffer, detail);
             return true;
         }
 
@@ -749,9 +750,7 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
         get_args.replybuff = sendbuffer;
         get_args.replyfile = filename;
 
-        CfGetFile(&get_args);
-
-        return true;
+        return CfGetFile(&get_args);
     }
     case PROTOCOL_COMMAND_OPENDIR:
     {
@@ -776,10 +775,10 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
             goto protocol_error;
         }
 
-        zret = PreprocessRequestPath(filename, sizeof(filename) - 1);
+        zret = PreprocessRequestPath(filename, sizeof(filename) - 1, &detail);
         if (zret == (size_t) -1)
         {
-            RefuseAccess(conn, recvbuffer);
+            RefuseAccessDetail(conn, recvbuffer, detail);
             return true;
         }
 
@@ -840,10 +839,10 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
             goto protocol_error;
         }
 
-        zret = PreprocessRequestPath(filename, sizeof(filename) - 1);
+        zret = PreprocessRequestPath(filename, sizeof(filename) - 1, &detail);
         if (zret == (size_t) -1)
         {
-            RefuseAccess(conn, recvbuffer);
+            RefuseAccessDetail(conn, recvbuffer, detail);
             return true;
         }
 
@@ -909,10 +908,10 @@ bool BusyWithNewProtocol(EvalContext *ctx, ServerConnectionState *conn)
             goto protocol_error;
         }
 
-        zret = PreprocessRequestPath(filename, sizeof(filename));
+        zret = PreprocessRequestPath(filename, sizeof(filename), &detail);
         if (zret == (size_t) -1)
         {
-            RefuseAccess(conn, recvbuffer);
+            RefuseAccessDetail(conn, recvbuffer, detail);
             return true;
         }
 

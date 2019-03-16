@@ -420,6 +420,7 @@ bool TraverseDirectoryTreeInternal(const char *base_path,
                                    int (*callback)(const char *, const struct stat *, void *),
                                    void *user_data)
 {
+    /* TODO: check detailed error code?  */
     Dir *dirh = DirOpen(base_path);
     if (!dirh)
     {
