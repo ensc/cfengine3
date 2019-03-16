@@ -1016,6 +1016,7 @@ typedef struct
     u_long plus_flags;          /* for *BSD chflags */
     u_long minus_flags;         /* for *BSD chflags */
     int rxdirs;
+    int nodirs;
 } FilePerms;
 
 /*************************************************************************/
@@ -1464,6 +1465,26 @@ typedef struct
 
 #include <json.h>
 
+enum RemoteBadDetail
+{
+    REMOTE_BAD_DETAIL_UNSPECIFIED = 0,
+    /* a component in pathname not a directory */
+    REMOTE_BAD_DETAIL_ENOTDIR = 20,
+    /* remote file does not exist */
+    REMOTE_BAD_DETAIL_ENOENT = 2,
+    /* access denied */
+    REMOTE_BAD_DETAIL_EPERM = 1,
+    /* invalid argument */
+    REMOTE_BAD_DETAIL_EINVAL = 22,
+};
+
+enum FileMissingOk
+{
+    FILE_MISSING_OK_NO,
+    FILE_MISSING_OK_LEAF,
+    FILE_MISSING_OK_ALL,
+};
+
 typedef struct
 {
     const char *source;
@@ -1490,6 +1511,7 @@ typedef struct
     int purge;
     short timeout;
     ProtocolVersion protocol_version;
+    enum FileMissingOk missing_ok;
 } FileCopy;
 
 typedef struct

@@ -31,6 +31,7 @@
 
 #include <communication.h>
 
+enum RemoteBadDetail;
 
 bool cfnet_init(const char *tls_min_version, const char *ciphers);
 void cfnet_shut(void);
@@ -47,7 +48,8 @@ void DisconnectServer(AgentConnection *conn);
 int CompareHashNet(const char *file1, const char *file2, bool encrypt, AgentConnection *conn);
 int CopyRegularFileNet(const char *source, const char *dest, off_t size,
                        bool encrypt, AgentConnection *conn);
-Item *RemoteDirList(const char *dirname, bool encrypt, AgentConnection *conn);
+Item *RemoteDirList(const char *dirname, bool encrypt, AgentConnection *conn,
+		    enum RemoteBadDetail *detail);
 
 int TLSConnectCallCollect(ConnectionInfo *conn_info, const char *username);
 

@@ -494,12 +494,18 @@ static FilePerms GetPermissionConstraints(const EvalContext *ctx, const Promise 
 
     p.findertype = PromiseGetConstraintAsRval(pp, "findertype", RVAL_TYPE_SCALAR);
     p.rxdirs = PromiseGetConstraintAsBoolean(ctx, "rxdirs", pp);
+    p.nodirs = PromiseGetConstraintAsBoolean(ctx, "nodirs", pp);
 
 // The default should be true
 
     if (!PromiseGetConstraintAsRval(pp, "rxdirs", RVAL_TYPE_SCALAR))
     {
         p.rxdirs = true;
+    }
+
+    if (!PromiseGetConstraintAsRval(pp, "nodirs", RVAL_TYPE_SCALAR))
+    {
+        p.nodirs = false;
     }
 
     return p;
@@ -792,6 +798,30 @@ ENTERPRISE_FUNC_0ARG_DEFINE_STUB(HashMethod, GetBestFileChangeHashMethod)
     return HASH_METHOD_BEST;
 }
 
+static enum FileMissingOk
+GetCopyMissingOk(const EvalContext *ctx, const Promise *pp)
+{
+    char const *value;
+
+    (void)ctx;
+    value = PromiseGetConstraintAsRval(pp, "missing_ok", RVAL_TYPE_SCALAR);
+
+    if (!value || strcmp(value, "no") == 0 || strcmp(value, "false") == 0) {
+	    /* default */
+	    return FILE_MISSING_OK_NO;
+    } else if (strcmp(value, "leaf") == 0) {
+	    /* only the file part; path must exist */
+	    return FILE_MISSING_OK_LEAF;
+    } else if (strcmp(value, "yes") == 0 || strcmp(value, "all") ||
+	       strcmp(value, "true")) {
+	    return FILE_MISSING_OK_ALL;
+    } else {
+	    Log(LOG_LEVEL_ERR, "invalid 'missing_ok=%s' constraint", value);
+	    PromiseRef(LOG_LEVEL_ERR, pp);
+	    return FILE_MISSING_OK_NO;
+    }
+}
+
 FileChange GetChangeMgtConstraints(const EvalContext *ctx, const Promise *pp)
 {
     FileChange c;
@@ -933,6 +963,7 @@ FileCopy GetCopyConstraints(const EvalContext *ctx, const Promise *pp)
     f.force_update = PromiseGetConstraintAsBoolean(ctx, "force_update", pp);
     f.force_ipv4 = PromiseGetConstraintAsBoolean(ctx, "force_ipv4", pp);
     f.check_root = PromiseGetConstraintAsBoolean(ctx, "check_root", pp);
+    f.missing_ok = GetCopyMissingOk(ctx, pp);
 
     value = PromiseGetConstraintAsRval(pp, "copy_size", RVAL_TYPE_SCALAR);
     if (!IntegerRangeFromString(value, &min, &max))

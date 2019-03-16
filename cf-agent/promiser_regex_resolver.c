@@ -125,6 +125,7 @@ PromiseResult LocateFilePromiserGroup(EvalContext *ctx, char *wildpath, const Pr
 
         strlcpy(regex, ip->name, CF_BUFSIZE);
 
+	/* TOOD: ignore error details? */
         if ((dirh = DirOpen(pbuffer)) == NULL)
         {
             // Could be a dummy directory to be created so this is not an error.

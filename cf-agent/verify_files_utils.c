@@ -94,7 +94,7 @@ static void FileAutoDefine(EvalContext *ctx, char *destfile);
 static void TruncateFile(char *name);
 static void RegisterAHardLink(int i, char *value, Attributes attr, CompressedArray **inode_cache);
 static PromiseResult VerifyCopiedFileAttributes(EvalContext *ctx, const char *src, const char *dest, struct stat *sstat, struct stat *dstat, Attributes attr, const Promise *pp);
-static int cf_stat(const char *file, struct stat *buf, FileCopy fc, AgentConnection *conn);
+static int cf_stat(const char *file, struct stat *buf, FileCopy fc, AgentConnection *conn, enum RemoteBadDetail *detail);
 #ifndef __MINGW32__
 static int cf_readlink(EvalContext *ctx, char *sourcefile, char *linkbuf, int buffsize, Attributes attr, const Promise *pp, AgentConnection *conn, PromiseResult *result);
 #endif
@@ -165,6 +165,10 @@ void VerifyFileLeaf(EvalContext *ctx, char *path, struct stat *sb, Attributes at
             (strcmp(path, pp->promiser) == 0))
         {
             Log(LOG_LEVEL_VERBOSE, "Promise to skip base directory '%s'", path);
+        }
+        else if (S_ISDIR(sb->st_mode) && attr.perms.nodirs)
+        {
+            Log(LOG_LEVEL_VERBOSE, "Promise to skip subdirectory '%s'", path);
         }
         else
         {
@@ -734,6 +738,7 @@ static PromiseResult SourceSearchAndCopy(EvalContext *ctx, const char *from, cha
     Item *namecache = NULL;
     const struct dirent *dirp;
     AbstractDir *dirh;
+    enum RemoteBadDetail detail;
 
     if (maxrecurse == 0)        /* reached depth limit */
     {
@@ -808,8 +813,14 @@ static PromiseResult SourceSearchAndCopy(EvalContext *ctx, const char *from, cha
     }
 
     /* Send OPENDIR command. */
-    if ((dirh = AbstractDirOpen(from, attr.copy, conn)) == NULL)
+    if ((dirh = AbstractDirOpen(from, attr.copy, conn, &detail)) == NULL)
     {
+	if (IsRemoteBadOk(attr.copy.missing_ok, detail))
+	{
+		Log(LOG_LEVEL_DEBUG, "failed to open %s (%u)\n", from, detail);
+		return PROMISE_RESULT_NOOP;
+	}
+
         cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_INTERRUPTED, pp, attr, "copy can't open directory '%s'", from);
         return PROMISE_RESULT_INTERRUPTED;
     }
@@ -863,8 +874,18 @@ static PromiseResult SourceSearchAndCopy(EvalContext *ctx, const char *from, cha
             /* No point in checking if there are untrusted symlinks here,
                since this is from a trusted source, by definition */
 
-            if (cf_stat(newfrom, &sb, attr.copy, conn) == -1)
+	    if (cf_stat(newfrom, &sb, attr.copy, conn, &detail) == -1)
             {
+		/* TODO: as we are recursing subdirectories, there can not be
+		 * distinguished between FILE_MISSING_OK_LEAF and
+		 * FILE_MISSING_OK_ALL */
+	        if (IsRemoteBadOk(attr.copy.missing_ok, detail))
+		{
+			Log(LOG_LEVEL_DEBUG, "lstat(%s) failed, but missing ok\n",
+			    newfrom);
+			continue;
+		}
+
                 Log(LOG_LEVEL_VERBOSE, "Can't stat '%s'. (cf_stat: %s)", newfrom, GetErrorStr());
                 if (conn != NULL &&
                     conn->conn_info->status != CONNECTIONINFO_STATUS_ESTABLISHED)
@@ -882,8 +903,18 @@ static PromiseResult SourceSearchAndCopy(EvalContext *ctx, const char *from, cha
         }
         else
         {
-            if (cf_lstat(newfrom, &sb, attr.copy, conn) == -1)
+	    if (cf_lstat(newfrom, &sb, attr.copy, conn, &detail) == -1)
             {
+		/* TODO: as we are recursing subdirectories, there can not be
+		 * distinguished between FILE_MISSING_OK_LEAF and
+		 * FILE_MISSING_OK_ALL */
+	        if (IsRemoteBadOk(attr.copy.missing_ok, detail))
+		{
+			Log(LOG_LEVEL_DEBUG, "lstat(%s) failed, but missing ok\n",
+			    newfrom);
+			continue;
+		}
+
                 Log(LOG_LEVEL_VERBOSE, "Can't stat '%s'. (cf_stat: %s)", newfrom, GetErrorStr());
                 if (conn != NULL &&
                     conn->conn_info->status != CONNECTIONINFO_STATUS_ESTABLISHED)
@@ -1011,19 +1042,27 @@ static PromiseResult VerifyCopy(EvalContext *ctx,
     struct stat ssb, dsb;
     const struct dirent *dirp;
     int found;
+    enum RemoteBadDetail detail;
 
     if (attr.copy.link_type == FILE_LINK_TYPE_NONE)
     {
         Log(LOG_LEVEL_DEBUG, "Treating links as files for '%s'", source);
-        found = cf_stat(source, &ssb, attr.copy, conn);
+        found = cf_stat(source, &ssb, attr.copy, conn, &detail);
     }
     else
     {
-        found = cf_lstat(source, &ssb, attr.copy, conn);
+        found = cf_lstat(source, &ssb, attr.copy, conn, &detail);
     }
 
     if (found == -1)
     {
+        if (IsRemoteBadOk(attr.copy.missing_ok, detail))
+	{
+		Log(LOG_LEVEL_DEBUG, "*stat(%s) failed in verify, but missing ok\n",
+		    source);
+		return PROMISE_RESULT_NOOP;
+	}
+
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, attr,
              "Can't stat '%s' in verify copy", source);
         return PROMISE_RESULT_FAIL;
@@ -1037,14 +1076,18 @@ static PromiseResult VerifyCopy(EvalContext *ctx,
     if (S_ISDIR(ssb.st_mode))
     {
         PromiseResult result = PROMISE_RESULT_NOOP;
+	bool do_skip_copy = false;
 
         strcpy(sourcedir, source);
         AddSlash(sourcedir);
         strcpy(destdir, destination);
         AddSlash(destdir);
 
-        if ((dirh = AbstractDirOpen(sourcedir, attr.copy, conn)) == NULL)
+        if ((dirh = AbstractDirOpen(sourcedir, attr.copy, conn, &detail)) == NULL)
         {
+            if (IsRemoteBadOk(attr.copy.missing_ok, detail))
+		return PROMISE_RESULT_NOOP;
+
             cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, attr,
                  "Can't open directory '%s'. (opendir: %s)",
                  sourcedir, GetErrorStr());
@@ -1109,8 +1152,14 @@ static PromiseResult VerifyCopy(EvalContext *ctx,
 
             if (attr.copy.link_type == FILE_LINK_TYPE_NONE)
             {
-                if (cf_stat(sourcefile, &ssb, attr.copy, conn) == -1)
-                {
+                if (cf_stat(sourcefile, &ssb, attr.copy, conn, &detail) == -1)
+		{
+			/* noop */
+		} else if (IsRemoteBadOk(attr.copy.missing_ok, detail)) {
+		    Log(LOG_LEVEL_DEBUG, "stat(%s) failed, but missing ok\n",
+			sourcefile);
+		    do_skip_copy = true;
+		} else {
                     cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, attr,
                          "Can't stat source file (notlinked) '%s'. (stat: %s)",
                          sourcefile, GetErrorStr());
@@ -1119,8 +1168,14 @@ static PromiseResult VerifyCopy(EvalContext *ctx,
             }
             else
             {
-                if (cf_lstat(sourcefile, &ssb, attr.copy, conn) == -1)
-                {
+		if (cf_lstat(sourcefile, &ssb, attr.copy, conn, &detail) == -1)
+		{
+			/* noop */
+		} else if (IsRemoteBadOk(attr.copy.missing_ok, detail)) {
+		    Log(LOG_LEVEL_DEBUG, "lstat(%s) failed, but missing ok\n",
+			sourcefile);
+		    do_skip_copy = true;
+		} else {
                     cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, attr,
                          "Can't stat source file '%s'. (lstat: %s)",
                          sourcefile, GetErrorStr());
@@ -1128,9 +1183,10 @@ static PromiseResult VerifyCopy(EvalContext *ctx,
                 }
             }
 
-            result = PromiseResultUpdate(
-                result, CfCopyFile(ctx, sourcefile, destfile, ssb,
-                                   attr, pp, inode_cache, conn));
+	    if (!do_skip_copy)
+		    result = PromiseResultUpdate(
+			    result, CfCopyFile(ctx, sourcefile, destfile, ssb,
+					       attr, pp, inode_cache, conn));
         }
 
         AbstractDirClose(dirh);
@@ -2429,7 +2485,8 @@ int DepthSearch(EvalContext *ctx, char *name, struct stat *sb, int rlevel, Attri
             }
         }
 
-        if (!attr.haveselect || SelectLeaf(ctx, path, &lsb, attr.select))
+        if (!attr.havecopy &&
+	    (!attr.haveselect || SelectLeaf(ctx, path, &lsb, attr.select)))
         {
             if (attr.havechange)
             {
@@ -2541,6 +2598,9 @@ static bool CheckLinkSecurity(struct stat *sb, char *name)
 static PromiseResult VerifyCopiedFileAttributes(EvalContext *ctx, const char *src, const char *dest, struct stat *sstat,
                                                 struct stat *dstat, Attributes attr, const Promise *pp)
 {
+    if (S_ISDIR(sstat->st_mode) && attr.perms.nodirs)
+        return PROMISE_RESULT_NOOP;
+
 #ifndef __MINGW32__
     mode_t newplus, newminus;
     uid_t save_uid;
@@ -2624,6 +2684,7 @@ static PromiseResult CopyFileSources(EvalContext *ctx, char *destination, Attrib
     char vbuff[CF_BUFSIZE];
     struct stat ssb, dsb;
     struct timespec start;
+    enum RemoteBadDetail detail;
 
     if (conn != NULL && (!conn->authenticated))
     {
@@ -2634,8 +2695,16 @@ static PromiseResult CopyFileSources(EvalContext *ctx, char *destination, Attrib
         return PROMISE_RESULT_FAIL;
     }
 
-    if (cf_stat(BufferData(source), &ssb, attr.copy, conn) == -1)
+    if (cf_stat(BufferData(source), &ssb, attr.copy, conn, &detail) == -1)
     {
+	if (IsRemoteBadOk(attr.copy.missing_ok, detail))
+	{
+		Log(LOG_LEVEL_DEBUG, "stat(%s) failed, but missing ok\n",
+		    BufferData(source));
+		BufferDestroy(source);
+		return PROMISE_RESULT_NOOP;
+	}
+
         cfPS(ctx, LOG_LEVEL_INFO, PROMISE_RESULT_FAIL, pp, attr,
              "Can't stat file '%s' on '%s' in files.copy_from promise",
              BufferData(source), conn ? conn->remoteip : "localhost");
@@ -2925,6 +2994,7 @@ PromiseResult ScheduleLinkChildrenOperation(EvalContext *ctx, char *destination,
     char promiserpath[CF_BUFSIZE], sourcepath[CF_BUFSIZE];
     struct stat lsb;
     int ret;
+    enum RemoteBadDetail detail;
 
     if ((ret = lstat(destination, &lsb)) != -1)
     {
@@ -2950,7 +3020,7 @@ PromiseResult ScheduleLinkChildrenOperation(EvalContext *ctx, char *destination,
         return result;
     }
 
-    if ((dirh = DirOpen(source)) == NULL)
+    if ((dirh = DirOpenCode(source, &detail)) == NULL)
     {
         cfPS(ctx, LOG_LEVEL_ERR, PROMISE_RESULT_FAIL, pp, attr,
              "Can't open source of children to link '%s'. (opendir: %s)",
@@ -3486,24 +3556,51 @@ static void RegisterAHardLink(int i, char *value, Attributes attr, CompressedArr
     }
 }
 
-static int cf_stat(const char *file, struct stat *buf, FileCopy fc, AgentConnection *conn)
+static int cf_stat(const char *file, struct stat *buf, FileCopy fc, AgentConnection *conn, enum RemoteBadDetail *detail)
 {
+    int rc;
     if (!file)
     {
-        return -1;
+	rc = -1;
     }
 
     if (conn == NULL)
     {
-        return stat(file, buf);
+        rc = stat(file, buf);
+	if (rc < 0) {
+		enum RemoteBadDetail	tmp_detail;
+
+		switch (errno) {
+		case ENOENT:
+			tmp_detail = REMOTE_BAD_DETAIL_ENOENT;
+			break;
+
+		case ENOTDIR:
+			tmp_detail = REMOTE_BAD_DETAIL_ENOTDIR;
+			break;
+
+		case EACCES:
+			tmp_detail = REMOTE_BAD_DETAIL_EPERM;
+			break;
+
+		default:
+			tmp_detail = REMOTE_BAD_DETAIL_UNSPECIFIED;
+			break;
+		}
+
+		if (detail)
+			*detail = tmp_detail;
+	}
     }
     else
     {
         assert(fc.servers != NULL &&
                strcmp(RlistScalarValue(fc.servers), "localhost") != 0);
 
-        return cf_remote_stat(conn, fc.encrypt, file, buf, "file");
+        rc = cf_remote_stat(conn, fc.encrypt, file, buf, "file", detail);
     }
+
+    return rc;
 }
 
 #ifndef __MINGW32__

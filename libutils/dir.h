@@ -27,7 +27,14 @@
 
 typedef struct Dir_ Dir;
 
-Dir *DirOpen(const char *dirname);
+enum RemoteBadDetail;
+Dir *DirOpenCode(const char *dirname, enum RemoteBadDetail *detail);
+
+inline static Dir *DirOpen(const char *dirname)
+{
+    return DirOpenCode(dirname, NULL);
+}
+
 const struct dirent *DirRead(Dir *dir);
 void DirClose(Dir *dir);
 

@@ -43,6 +43,7 @@ static const int CF_NOSIZE = -1;
 #include <pipes.h>
 #include <classic.h>                  /* SendSocketStream */
 #include <net.h>                      /* SendTransaction,ReceiveTransaction */
+#include <openssl/err.h>                                   /* ERR_get_error */
 #include <tls_generic.h>              /* TLSSend */
 #include <rlist.h>
 #include <cf-serverd-enterprise-stubs.h>
@@ -56,14 +57,34 @@ static const int CF_NOSIZE = -1;
 
 /* NOTE: Always Log(LOG_LEVEL_INFO) before calling RefuseAccess(), so that
  * some clue is printed in the cf-serverd logs. */
-void RefuseAccess(ServerConnectionState *conn, char *errmesg)
+void RefuseAccessDetail(ServerConnectionState *conn, char *errmesg,
+                        enum RemoteBadDetail detail)
 {
-    SendTransaction(conn->conn_info, CF_FAILEDSTR, 0, CF_DONE);
+    SendTransactionCode(conn->conn_info, CF_FAILEDSTR, 0, CF_DONE, detail);
 
-    /* TODO remove logging, it's done elsewhere. */
-    Log(LOG_LEVEL_VERBOSE, "REFUSAL to user='%s' of request: %s",
-        NULL_OR_EMPTY(conn->username) ? "?" : conn->username,
-        errmesg);
+    switch (detail) {
+    case REMOTE_BAD_DETAIL_UNSPECIFIED:
+        /* TODO remove logging, it's done elsewhere. */
+        Log(LOG_LEVEL_VERBOSE, "REFUSAL to user='%s' of request: %s",
+            NULL_OR_EMPTY(conn->username) ? "?" : conn->username,
+            errmesg);
+        break;
+
+    case REMOTE_BAD_DETAIL_ENOENT:
+        Log(LOG_LEVEL_INFO, "NONEXISTING FILE in request: %s", errmesg);
+        break;
+
+    case REMOTE_BAD_DETAIL_ENOTDIR:
+        Log(LOG_LEVEL_INFO, "BAD PATH in request: %s", errmesg);
+        break;
+
+    default:
+        Log(LOG_LEVEL_DEBUG,
+            "REFUSAL to user='%s' of request: %s (%d)",
+            NULL_OR_EMPTY(conn->username) ? "?" : conn->username,
+            errmesg, detail);
+        break;
+    }
 }
 
 bool IsUserNameValid(const char *username)
@@ -395,13 +416,14 @@ static void FailedTransfer(ConnectionInfo *connection)
     }
 }
 
-void CfGetFile(ServerFileGetState *args)
+bool CfGetFile(ServerFileGetState *args)
 {
     int fd;
     off_t n_read, total = 0, sendlen = 0, count = 0;
     char sendbuffer[CF_BUFSIZE + 256], filename[CF_BUFSIZE];
     struct stat sb;
     int blocksize = 2048;
+    bool rc = false;
 
     ConnectionInfo *conn_info = args->conn->conn_info;
 
@@ -427,7 +449,7 @@ void CfGetFile(ServerFileGetState *args)
         {
             TLSSend(ConnectionInfoSSL(conn_info), sendbuffer, args->buf_size);
         }
-        return;
+        return false;
     }
 
 /* File transfer */
@@ -469,6 +491,7 @@ void CfGetFile(ServerFileGetState *args)
 
             if (n_read == 0)
             {
+                rc = true;
                 break;
             }
             else
@@ -544,6 +567,8 @@ void CfGetFile(ServerFileGetState *args)
 
         close(fd);
     }
+
+    return rc;
 }
 
 void CfEncryptGetFile(ServerFileGetState *args)
@@ -557,7 +582,6 @@ void CfEncryptGetFile(ServerFileGetState *args)
     unsigned char iv[32] =
         { 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8 };
     int blocksize = CF_BUFSIZE - 4 * CF_INBAND_OFFSET;
-    EVP_CIPHER_CTX ctx;
     char *key, enctype;
     struct stat sb;
     ConnectionInfo *conn_info = args->conn->conn_info;
@@ -582,7 +606,13 @@ void CfEncryptGetFile(ServerFileGetState *args)
         return;
     }
 
-    EVP_CIPHER_CTX_init(&ctx);
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (ctx == NULL)
+    {
+        Log(LOG_LEVEL_ERR, "Failed to allocate cipher: %s",
+            TLSErrorString(ERR_get_error()));
+        return;
+    }
 
     if ((fd = safe_open(filename, O_RDONLY)) == -1)
     {
@@ -631,20 +661,20 @@ void CfEncryptGetFile(ServerFileGetState *args)
 
             if (n_read > 0)
             {
-                EVP_EncryptInit_ex(&ctx, CfengineCipher(enctype), NULL, key, iv);
+                EVP_EncryptInit_ex(ctx, CfengineCipher(enctype), NULL, key, iv);
 
-                if (!EVP_EncryptUpdate(&ctx, out, &cipherlen, sendbuffer, n_read))
+                if (!EVP_EncryptUpdate(ctx, out, &cipherlen, sendbuffer, n_read))
                 {
                     FailedTransfer(conn_info);
-                    EVP_CIPHER_CTX_cleanup(&ctx);
+                    EVP_CIPHER_CTX_free(ctx);
                     close(fd);
                     return;
                 }
 
-                if (!EVP_EncryptFinal_ex(&ctx, out + cipherlen, &finlen))
+                if (!EVP_EncryptFinal_ex(ctx, out + cipherlen, &finlen))
                 {
                     FailedTransfer(conn_info);
-                    EVP_CIPHER_CTX_cleanup(&ctx);
+                    EVP_CIPHER_CTX_free(ctx);
                     close(fd);
                     return;
                 }
@@ -655,7 +685,7 @@ void CfEncryptGetFile(ServerFileGetState *args)
                 if (SendTransaction(conn_info, out, cipherlen + finlen, CF_DONE) == -1)
                 {
                     Log(LOG_LEVEL_VERBOSE, "Send failed in GetFile. (send: %s)", GetErrorStr());
-                    EVP_CIPHER_CTX_cleanup(&ctx);
+                    EVP_CIPHER_CTX_free(ctx);
                     close(fd);
                     return;
                 }
@@ -667,14 +697,14 @@ void CfEncryptGetFile(ServerFileGetState *args)
                 {
                     Log(LOG_LEVEL_VERBOSE, "Send failed in GetFile. (send: %s)", GetErrorStr());
                     close(fd);
-                    EVP_CIPHER_CTX_cleanup(&ctx);
+                    EVP_CIPHER_CTX_free(ctx);
                     return;
                 }
             }
         }
     }
 
-    EVP_CIPHER_CTX_cleanup(&ctx);
+    EVP_CIPHER_CTX_free(ctx);
     close(fd);
 }
 
@@ -1338,6 +1368,12 @@ size_t ShortcutsExpand(char *path, size_t path_size,
     return (size_t) -1;
 }
 
+#define return_bad(_detail, _code) do {		\
+		if ((_detail))			\
+			*(_detail) = (_code);	\
+		return (size_t) -1;		\
+	} while (0)
+
 /**
  * Canonicalize a path, ensure it is absolute, and resolve all symlinks.
  * In detail:
@@ -1358,7 +1394,8 @@ size_t ShortcutsExpand(char *path, size_t path_size,
  * @return the length of #reqpath after preprocessing. In case of error
  *         return (size_t) -1.
  */
-size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size)
+size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size,
+			     enum RemoteBadDetail *detail)
 {
     errno = 0;             /* on return, errno might be set from realpath() */
     char dst[reqpath_size];
@@ -1367,7 +1404,7 @@ size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size)
     if (reqpath_len == 0)
     {
         UnexpectedError("PreprocessRequestPath: 0 length string!");
-        return (size_t) -1;
+	return_bad(detail, REMOTE_BAD_DETAIL_EINVAL);
     }
 
     /* Translate all slashes to backslashes on Windows so that all the rest
@@ -1387,7 +1424,7 @@ size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size)
     if (!PathIsAbsolute(reqpath))
     {
         Log(LOG_LEVEL_INFO, "Relative paths are not allowed: %s", reqpath);
-        return (size_t) -1;
+	return_bad(detail, REMOTE_BAD_DETAIL_EINVAL);
     }
 
     /* TODO replace realpath with Solaris' resolvepath(), in all
@@ -1418,14 +1455,29 @@ size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size)
         if ((lstat(reqpath, &statbuf) == 0) && S_ISLNK(statbuf.st_mode))
         {
             Log(LOG_LEVEL_VERBOSE, "Requested file is a dead symbolic link (filename: %s)", reqpath);
-            strlcpy(dst, reqpath, CF_BUFSIZE);
+            return_bad(detail, REMOTE_BAD_DETAIL_ENOENT);
         }
         else
         {
-            Log(LOG_LEVEL_INFO,
+            int err = errno;
+
+            Log((err == ENOENT) ? LOG_LEVEL_DEBUG : LOG_LEVEL_INFO,
                 "Failed to canonicalise filename '%s' (realpath: %s)",
                 reqpath, GetErrorStr());
-            return (size_t) -1;
+
+	    switch (err) {
+	    case ENOTDIR:
+		    return_bad(detail, REMOTE_BAD_DETAIL_ENOTDIR);
+
+	    case ENOENT:
+		    return_bad(detail, REMOTE_BAD_DETAIL_ENOENT);
+
+	    case EACCES:
+		    return_bad(detail, REMOTE_BAD_DETAIL_EPERM);
+
+	    default:
+		    return_bad(detail, REMOTE_BAD_DETAIL_UNSPECIFIED);
+	    }
         }
     }
 
@@ -1439,7 +1491,7 @@ size_t PreprocessRequestPath(char *reqpath, size_t reqpath_size)
         if (dst_len + 2 > sizeof(dst))
         {
             Log(LOG_LEVEL_INFO, "Error, path too long: %s", reqpath);
-            return (size_t) -1;
+	    return_bad(detail, REMOTE_BAD_DETAIL_EINVAL);
         }
 
         PathAppendTrailingSlash(dst, dst_len);
@@ -1632,7 +1684,7 @@ bool DoExec2(const EvalContext *ctx,
     {
         char arg0[PATH_MAX];
         if (CommandArg0_bound(arg0, CFRUNCOMMAND, sizeof(arg0)) == (size_t) -1 ||
-            PreprocessRequestPath(arg0, sizeof(arg0))           == (size_t) -1)
+            PreprocessRequestPath(arg0, sizeof(arg0), NULL)     == (size_t) -1)
         {
             Log(LOG_LEVEL_INFO, "EXEC failed, invalid cfruncommand arg0");
             RefuseAccess(conn, "EXEC");

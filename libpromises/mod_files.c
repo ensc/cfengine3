@@ -248,6 +248,7 @@ static const ConstraintSyntax perms_constraints[] =
     ConstraintSyntaxNewString("mode", CF_MODERANGE, "File permissions (like posix chmod)", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewStringList("owners", CF_USERRANGE, "List of acceptable owners or user ids, first is change target", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewBool("rxdirs", "true/false add execute flag for directories if read flag is set", SYNTAX_STATUS_NORMAL),
+    ConstraintSyntaxNewBool("nodirs", "true/false do not change directory permissions if flag is set", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewNull()
 };
 
@@ -326,6 +327,7 @@ static const ConstraintSyntax copy_from_constraints[] =
     ConstraintSyntaxNewBool("type_check", "true/false compare file types before copying and require match", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewBool("verify", "true/false verify transferred file by hashing after copy (resource penalty). Default value: false", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewOption("protocol_version", "0,undefined,1,classic,2,latest", "CFEngine protocol version to use when connecting to the server. Default: undefined", SYNTAX_STATUS_NORMAL),
+    ConstraintSyntaxNewOption("missing_ok", "no,leaf,yes,all,true,false,no", "allow file or its pathcomponents to be missing", SYNTAX_STATUS_NORMAL),
     ConstraintSyntaxNewNull()
 };
 
